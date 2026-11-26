@@ -11,7 +11,7 @@ Overmark is a free, open-source alternative to paid screen-annotation apps such 
 
 | | **Claude app** | **Standalone Mac app (DMG)** |
 |---|---|---|
-| Install | Open the shared Overmark artifact in the Claude desktop app → **Install as Mac app** | Download the DMG from [Releases](../../releases), or build it yourself (below) |
+| Install | Open the shared Overmark artifact in the Claude desktop app → **Install as Mac app** | Download the DMG from [Releases](https://github.com/thepiyushway/overmark/releases), or build it yourself (below) |
 | Needs | Claude desktop app, signed in | macOS 12+ |
 | Zoom lens | Yes, for your own Claude organization (it needs Claude's full-access permission) | Yes |
 | Menu bar only, no Dock icon | Dock icon stays while it runs | Yes |
