@@ -1,0 +1,1423 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Overmark</title>
+<script type="application/json" id="claude-artifacts-manifest">{"permissions": ["overlay", "shortcuts", "menu-bar", "full-access"]}</script>
+<script>try{var m=localStorage.getItem('overmark.lastMode');if(m==='"overlay"')document.documentElement.classList.add('overlay');if(m==='"setup"')document.documentElement.classList.add('setup')}catch(e){}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+/* VOICE: a presenter's tool, plain-spoken; nothing ornamental.
+   IDEA: a red marker on a sheet of acetate laid over a real working window.
+   PICTURE: an ordinary metrics window, already marked up, live to draw on; in the app, a native-feeling settings window.
+   COLOUR and TYPE: desk-grey ground, white window, ink black; marker red as the only loud colour. Schibsted Grotesk.
+   LAYOUT: short header, headline, marked-up window as hero, then what it does; the app gets tabbed settings. */
+:root{color-scheme:light dark;
+  --bg:light-dark(#f4f3ef,#0f0f10);--ink:light-dark(#121212,#f2f1ec);--mute:light-dark(#5f5e5a,#9d9c97);
+  --line:light-dark(#dedcd5,#29292d);--card:light-dark(#ffffff,#18181b);--desk:light-dark(#d8d6cf,#1d1d20);
+  --win:light-dark(#ffffff,#16161a);--win2:light-dark(#f6f5f2,#1c1c21);--red:#ff3b30;--blue:#0a84ff;--ok:#1f9d55}
+:root[data-theme=light]{color-scheme:light}:root[data-theme=dark]{color-scheme:dark}
+*{box-sizing:border-box;min-width:0}
+[hidden]{display:none!important}
+html{-webkit-font-smoothing:antialiased}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 "Schibsted Grotesk",system-ui,-apple-system,sans-serif;overflow-x:clip}
+button,input,select{font:inherit;color:inherit}
+.wrap{max-width:1240px;margin:0 auto;padding:0 max(4vw,16px)}
+.top{display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding-block:18px}
+.mark{width:36px;height:36px;flex:none}
+.brand{font-weight:800;font-size:19px;letter-spacing:-.01em}
+.acts{margin-left:auto;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.btn{min-height:40px;padding:0 16px;border-radius:999px;border:1px solid var(--line);background:var(--card);cursor:pointer;font-weight:600;font-size:15px;white-space:nowrap}
+.btn.primary{background:var(--ink);border-color:var(--ink);color:var(--bg)}
+.btn:hover{border-color:var(--ink)}
+.btn:focus-visible,.link:focus-visible,.tb button:focus-visible,.tab:focus-visible{outline:3px solid var(--blue);outline-offset:2px}
+.head{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:clamp(16px,4vw,64px);align-items:end;padding:clamp(16px,3vw,36px) 0 clamp(18px,2.4vw,28px)}
+h1{font-size:clamp(34px,4.6vw,52px);line-height:1.04;letter-spacing:-.025em;margin:0;font-weight:800;text-wrap:balance}
+h1 u{text-decoration:none;background:linear-gradient(transparent 62%,rgba(255,214,10,.75) 62%,rgba(255,214,10,.75) 92%,transparent 92%)}
+.lede{margin:0;color:var(--mute);font-size:17px;max-width:46ch}
+.status{margin:10px 0 0;font-size:14px;color:var(--mute);min-height:1.4em}
+#stage{position:relative;height:clamp(420px,60vh,640px);border-radius:20px;background:var(--desk);overflow:hidden;isolation:isolate}
+.win{position:absolute;inset:7% 6% 0;background:var(--win);border-radius:12px 12px 0 0;box-shadow:0 1px 0 rgba(0,0,0,.04),0 24px 60px -24px rgba(0,0,0,.35);display:grid;grid-template-rows:38px 1fr;overflow:hidden;font-size:14px}
+.wbar{display:flex;align-items:center;gap:8px;padding:0 14px;border-bottom:1px solid var(--line);background:var(--win2);color:var(--mute);font-size:13px}
+.wbar i{width:12px;height:12px;border-radius:50%;background:#ff5f57}.wbar i:nth-child(2){background:#febc2e}.wbar i:nth-child(3){background:#28c840}
+.wbar span{margin:0 auto;font-weight:500}
+.wbody{display:grid;grid-template-columns:180px minmax(0,1fr)}
+.side{border-right:1px solid var(--line);padding:14px 10px;background:var(--win2);display:flex;flex-direction:column;gap:2px;color:var(--mute)}
+.side b{font-size:11px;font-weight:600;padding:6px 8px}
+.side span{padding:6px 8px;border-radius:6px}.side .on{background:var(--line);color:var(--ink);font-weight:600}
+.doc{padding:18px clamp(14px,2.4vw,28px);display:grid;grid-template-rows:auto auto 1fr;gap:16px;overflow:hidden}
+.kpis{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.kpis div{border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+.kpis small{display:block;color:var(--mute);font-size:12px}
+.kpis b{font-size:clamp(18px,2.2vw,26px);letter-spacing:-.02em;white-space:nowrap}
+.kpis em{font-style:normal;font-size:12px;margin-left:6px;color:var(--ok)}.kpis .bad em{color:#d93025}
+.chart{position:relative;height:clamp(90px,13vh,150px)}
+.chart svg{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
+#peak{position:absolute;width:10px;height:10px;border-radius:50%;background:var(--blue);border:2px solid var(--win);transform:translate(-50%,-50%)}
+.tbl{width:100%;border-collapse:collapse;font-size:13px}
+.tbl th{text-align:left;font-weight:600;color:var(--mute);padding:6px 8px;border-bottom:1px solid var(--line)}
+.tbl td{padding:7px 8px;border-bottom:1px solid var(--line)}
+.tbl td:last-child,.tbl th:last-child{text-align:right;font-variant-numeric:tabular-nums}
+.note{font-size:13px;color:var(--mute);margin:10px 2px 0}
+.feats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:clamp(18px,3vw,40px);padding:clamp(28px,4vw,52px) 0;margin-top:clamp(28px,4vw,52px);border-top:1px solid var(--line)}
+.feats h3{margin:10px 0 6px;font-size:18px;line-height:1.2}
+.feats p{margin:0;color:var(--mute);font-size:15px}
+.feats svg{width:40px;height:40px}
+.sec{padding:clamp(28px,4vw,52px) 0;border-top:1px solid var(--line);display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:clamp(24px,5vw,72px)}
+.sec h2{font-size:24px;line-height:1.15;margin:0 0 6px;letter-spacing:-.01em}
+.sec p{margin:0 0 14px;color:var(--mute)}
+.krow{display:grid;grid-template-columns:minmax(0,1fr) auto auto auto;gap:10px;align-items:center;padding:10px 0;border-bottom:1px solid var(--line)}
+.krow small{display:block;color:var(--mute);font-size:13px;font-weight:400}
+.krow.rec .kcaps em{color:var(--red);font-style:normal;font-weight:600;font-size:14px}
+.kname{font-weight:600}
+.kcaps{display:flex;align-items:center;gap:4px;flex-wrap:wrap;justify-content:flex-end}
+.kcaps .unset{color:var(--mute);font-size:14px}
+kbd{font:600 13px/1 "Schibsted Grotesk",system-ui;min-width:28px;padding:7px 8px 8px;border-radius:7px;border:1px solid var(--line);border-bottom-width:2px;background:var(--card);display:inline-flex;align-items:center;justify-content:center;gap:5px;white-space:nowrap}
+kbd .sym{font-size:14px;color:var(--mute)}
+.plus{color:var(--mute);font-size:13px}
+.link{border:0;background:none;padding:6px 4px;color:var(--blue);font-weight:600;cursor:pointer;min-height:36px}
+.link.x{color:var(--mute);font-size:18px;line-height:1}
+.msg{min-height:1.4em;font-size:14px;color:var(--mute);margin:10px 0 0}.msg.err{color:var(--red)}
+.grid2{display:grid;grid-template-columns:auto minmax(0,1fr);gap:10px 14px;align-items:center;margin:0}
+.grid2 dt{display:flex;gap:4px;flex-wrap:wrap}
+.grid2 dd{margin:0;color:var(--mute)}
+footer{padding:28px 0 40px;color:var(--mute);font-size:13px}
+/* Drawing surface + toolbar */
+#surface{position:absolute;inset:0;touch-action:none;cursor:crosshair;z-index:2}
+#ink,#fx{position:absolute;inset:0;width:100%;height:100%;display:block;pointer-events:none}
+#note{position:absolute;min-width:160px;min-height:1.3em;border:1.5px dashed currentColor;background:rgba(127,127,127,.12);outline:none;resize:none;padding:2px 4px;font-weight:700;line-height:1.2;overflow:hidden;z-index:4;border-radius:6px}
+.tb{position:absolute;left:50%;bottom:16px;transform:translateX(-50%);z-index:5;display:flex;align-items:center;gap:2px;flex-wrap:wrap;justify-content:center;width:max-content;max-width:calc(100% - 20px);
+  padding:5px;border-radius:14px;background:rgba(18,18,20,.92);color:#fff;backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);box-shadow:0 12px 32px rgba(0,0,0,.35),inset 0 0 0 1px rgba(255,255,255,.08);user-select:none}
+.tb button{width:32px;height:32px;border:0;border-radius:9px;background:transparent;display:grid;place-items:center;cursor:pointer;padding:0;color:rgba(255,255,255,.8)}
+.tb button:hover{background:rgba(255,255,255,.1);color:#fff}
+.tb button[aria-pressed=true]{background:rgba(255,255,255,.2);color:#fff}
+.tb button:disabled{opacity:.3;cursor:default}
+.tb svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.tb .sw{width:14px;height:14px;border-radius:50%;box-shadow:inset 0 0 0 1px rgba(0,0,0,.25)}
+.tb button[aria-pressed=true] .sw{box-shadow:0 0 0 2px rgba(18,18,20,1),0 0 0 4px #fff}
+.tb .dot{border-radius:50%;background:currentColor}
+.tb .sep{width:1px;height:20px;background:rgba(255,255,255,.14);margin:0 3px}
+.tb .grip{cursor:grab;width:18px}
+.tb .done{width:auto;padding:0 14px;font-weight:700;font-size:14px;background:var(--red);color:#fff;margin-left:4px}
+.tb .done:hover{background:#e3261c}
+#cheat{position:absolute;inset:0;z-index:7;display:grid;place-items:center;background:rgba(0,0,0,.35)}
+#cheat>div{background:rgba(18,18,20,.95);color:#fff;border-radius:16px;padding:22px 26px;max-width:min(92%,620px);box-shadow:0 20px 50px rgba(0,0,0,.5)}
+#cheat h4{margin:0 0 12px;font-size:17px}
+#cheat dl{display:grid;grid-template-columns:auto 1fr;gap:8px 16px;margin:0;font-size:14px}
+#cheat dd{margin:0;color:rgba(255,255,255,.7)}
+#cheat kbd{background:rgba(255,255,255,.1);border-color:rgba(255,255,255,.2);color:#fff;min-width:0;padding:4px 7px}
+/* Desktop overlay: a transparent sheet over the screen. color-scheme must match the host window or Chromium paints an opaque backdrop. */
+:root.overlay,:root.overlay[data-theme]{color-scheme:light!important}
+.overlay,.overlay body{background:transparent!important}
+.overlay #page,.overlay #settings{display:none}
+.overlay #surface{position:fixed;cursor:default}
+.overlay.drawing #surface{cursor:crosshair}
+.overlay .tb{top:14px;bottom:auto;padding:7px;border-radius:18px;gap:3px;max-width:calc(100% - 28px)}
+.overlay .tb button{width:42px;height:42px;border-radius:11px}
+.overlay .tb svg{width:23px;height:23px}
+.overlay .tb .sw{width:20px;height:20px}
+.overlay .tb .sep{height:26px;margin:0 5px}
+.overlay .tb .grip{width:24px}
+.overlay .tb .done{width:auto;padding:0 18px;font-size:16px;height:42px}
+.overlay .tb .dot{transform:scale(1.25)}
+.overlay.tb-bottom .tb{top:auto;bottom:18px}
+.overlay:not(.drawing) .tb,.overlay:not(.drawing) #note,.overlay.bare .tb{display:none}
+.tb .only-overlay{display:none}.overlay .tb .only-overlay{display:grid}
+#hud{position:fixed;left:50%;bottom:44px;transform:translate(-50%,12px);z-index:9;display:none;align-items:center;gap:10px;max-width:min(92vw,760px);
+  padding:12px 18px;border-radius:14px;background:rgba(18,18,20,.92);color:#fff;font:500 15px/1.35 "Schibsted Grotesk",system-ui,sans-serif;
+  box-shadow:0 12px 34px rgba(0,0,0,.4);opacity:0;transition:opacity .25s,transform .25s;pointer-events:none}
+#hud.on{opacity:1;transform:translate(-50%,0)}
+.overlay #hud{display:flex}
+#hud .mk{width:22px;height:22px;flex:none}
+#hud kbd{background:rgba(255,255,255,.12);border-color:rgba(255,255,255,.22);color:#fff;min-width:0;padding:4px 7px}
+/* Settings app (desktop window) */
+#settings{display:none}
+.setup #page,.setup #surface{display:none}
+.setup #settings{display:block}
+.st-top{position:sticky;top:0;z-index:3;background:color-mix(in srgb,var(--bg) 88%,transparent);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-bottom:1px solid var(--line);app-region:drag;-webkit-app-region:drag}
+.st-top button,.st-top .acts,.st-top .tabs,.st-top .tab{app-region:no-drag;-webkit-app-region:no-drag}
+.st-bar{display:flex;align-items:center;gap:12px;padding:18px 18px 2px 84px;min-height:60px}
+.st-bar .acts{margin-left:auto}
+.tabs{display:flex;justify-content:center;gap:4px;padding:8px 12px 10px;overflow-x:auto}
+.tab{display:grid;justify-items:center;gap:3px;min-width:76px;padding:8px 10px 6px;border-radius:10px;border:0;background:none;cursor:pointer;color:var(--mute);font-size:13px;font-weight:600}
+.tab svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.tab[aria-selected=true]{background:var(--line);color:var(--ink)}
+.tab[aria-selected=true] svg{color:var(--red)}
+.banner{max-width:736px;margin:16px auto 0;padding:10px 14px;border-radius:10px;background:var(--card);border:1px solid var(--line);font-size:14px}
+.banner:empty{display:none}
+.pane{max-width:780px;margin:0 auto;padding:22px 22px 40px}
+.pane h2{font-size:15px;margin:22px 0 8px;font-weight:700}
+.pane h2:first-child{margin-top:0}
+.group{background:var(--card);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+.row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:16px;align-items:center;padding:12px 16px;border-top:1px solid var(--line)}
+.row:first-child{border-top:0}
+.row b{display:block;font-weight:600;font-size:15px}
+.row small{display:block;color:var(--mute);font-size:13px;line-height:1.4}
+.ctl{display:flex;align-items:center;gap:10px;justify-content:flex-end;flex-wrap:wrap}
+.ctl output{font-size:13px;color:var(--mute);min-width:56px;text-align:right;font-variant-numeric:tabular-nums}
+input[type=range]{width:min(200px,40vw);accent-color:var(--red)}
+select{min-height:34px;border-radius:8px;border:1px solid var(--line);background:var(--bg);padding:0 8px;font-size:14px}
+input[type=color]{width:38px;height:28px;border:1px solid var(--line);border-radius:7px;padding:2px;background:var(--bg);cursor:pointer}
+.swt{position:relative;display:inline-block;width:42px;height:24px}
+.swt input{opacity:0;width:0;height:0;position:absolute}
+.swt span{position:absolute;inset:0;border-radius:99px;background:var(--line);transition:background .15s;cursor:pointer}
+.swt span::after{content:"";position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.3);transition:transform .15s}
+.swt input:checked+span{background:var(--red)}.swt input:checked+span::after{transform:translateX(18px)}
+.swt input:focus-visible+span{outline:3px solid var(--blue);outline-offset:2px}
+.preview{position:relative;height:220px;border-radius:14px;background:var(--desk);overflow:hidden;cursor:none;margin-top:12px}
+.preview canvas{position:absolute;inset:0;width:100%;height:100%}
+.preview .pv-doc{position:absolute;inset:18px 22px;background:var(--win);border-radius:10px;padding:16px 18px;font-size:14px;color:var(--mute);display:grid;gap:8px;align-content:start}
+.preview .pv-doc b{color:var(--ink);font-size:16px}
+.preview .pv-doc i{display:block;height:9px;border-radius:5px;background:var(--line)}
+.hint{font-size:13px;color:var(--mute);margin:8px 2px 0}
+.chips{display:flex;gap:8px;flex-wrap:wrap}
+.chip{font-size:13px;padding:5px 11px;border-radius:99px;border:1px solid var(--line);background:var(--card)}
+.chip.ok{border-color:#30d158}.chip.ok::before{content:"✓ ";color:var(--ok);font-weight:700}
+.pal{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+pre.diag{white-space:pre-wrap;overflow-wrap:anywhere;background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px;max-height:240px;overflow:auto;font-size:12px;margin:0}
+.about{text-align:center;padding:24px 0}
+.about canvas{width:88px;height:88px}
+.about h3{font-size:26px;margin:10px 0 4px}
+.about p{color:var(--mute);margin:6px auto;max-width:52ch}
+.about a,footer a{color:var(--blue);font-weight:600;text-decoration:none}
+@media(max-width:900px){.feats{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:820px){.head,.sec{grid-template-columns:minmax(0,1fr)}.wbody{grid-template-columns:minmax(0,1fr)}.side{display:none}}
+@media(max-width:600px){.tb{bottom:8px;padding:3px;gap:0}.tb button{width:28px;height:28px}.tb .sep{display:none}#stage{height:480px}.win{inset:5% 4% 0}.kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.kpis div:nth-child(3){display:none}.acts{margin-left:0;width:100%}.feats{grid-template-columns:minmax(0,1fr)}.row{grid-template-columns:minmax(0,1fr)}.ctl{justify-content:flex-start}}
+@media(prefers-reduced-motion:no-preference){.btn{transition:transform .12s,border-color .12s}.btn:active{transform:scale(.97)}}
+</style>
+</head>
+<body>
+<div id="page" class="wrap">
+  <header class="top">
+    <canvas class="mark" id="mark" width="72" height="72" aria-hidden="true"></canvas>
+    <span class="brand">Overmark</span>
+    <div class="acts"><button class="btn primary" id="install" type="button" hidden>Install as Mac app</button></div>
+  </header>
+  <div class="head">
+    <h1>Draw on <u>anything</u> on your screen.</h1>
+    <div>
+      <p class="lede">Circle a number, point at a button, spotlight your cursor or zoom into tiny text, while you present, teach or record. Press Esc and it steps out of the way.</p>
+      <p class="status" id="status"></p>
+    </div>
+  </div>
+  <div id="stage">
+    <div class="win" aria-hidden="true">
+      <div class="wbar"><i></i><i></i><i></i><span>Weekly metrics · Week 47</span></div>
+      <div class="wbody">
+        <div class="side"><b>Workspace</b><span class="on">Overview</span><span>Revenue</span><span>Signups</span><span>Retention</span><span>Support</span></div>
+        <div class="doc">
+          <div class="kpis">
+            <div><small>Monthly revenue</small><b>$48.2k</b><em>+12.4%</em></div>
+            <div><small>New signups</small><b>3,180</b><em>+31%</em></div>
+            <div class="bad" id="kpiChurn"><small>Churn</small><b>4.1%</b><em>+0.9 pt</em></div>
+          </div>
+          <div class="chart">
+            <svg viewBox="0 0 600 150" preserveAspectRatio="none"><polyline fill="none" stroke="#0a84ff" stroke-width="2.5" vector-effect="non-scaling-stroke"
+              points="0,118 60,112 120,116 180,104 240,108 300,96 360,40 420,70 480,64 540,58 600,52"/>
+              <polyline fill="none" stroke="currentColor" stroke-opacity=".12" stroke-width="1" vector-effect="non-scaling-stroke" points="0,149 600,149"/></svg>
+            <span id="peak" style="left:60%;top:26.7%"></span>
+          </div>
+          <table class="tbl">
+            <thead><tr><th>Plan</th><th>Customers</th><th>Revenue</th></tr></thead>
+            <tbody><tr><td>Starter</td><td>1,204</td><td>$9.6k</td></tr><tr id="hotRow"><td>Team</td><td>402</td><td>$24.1k</td></tr><tr><td>Enterprise</td><td>31</td><td>$14.5k</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p class="note">Sample window with sample numbers, marked up with Overmark's own tools. Draw on it, try the highlight and spotlight buttons, or press X to clear.</p>
+
+  <section class="feats">
+    <div><svg viewBox="0 0 40 40" aria-hidden="true"><rect x="2" y="2" width="36" height="36" rx="10" fill="#ff3b30"/><path d="M11 27l3-1 12-12-2-2-12 12z" fill="none" stroke="#fff" stroke-width="2.4" stroke-linejoin="round"/></svg>
+      <h3>Draw over anything</h3><p>Pen, highlighter, line, arrow, box, circle and text in your colours or a gradient. Ink can erase itself after a few seconds, or switch to a whiteboard.</p></div>
+    <div><svg viewBox="0 0 40 40" aria-hidden="true"><rect x="2" y="2" width="36" height="36" rx="10" fill="#ffd60a"/><circle cx="20" cy="20" r="9" fill="none" stroke="#121212" stroke-width="2.4"/><circle cx="20" cy="20" r="2.4" fill="#121212"/></svg>
+      <h3>Cursor highlight</h3><p>A halo that follows your pointer: circle, ring, squircle or rhombus, any colour, border and glow. It can fade when you stop moving.</p></div>
+    <div><svg viewBox="0 0 40 40" aria-hidden="true"><rect x="2" y="2" width="36" height="36" rx="10" fill="#121212"/><circle cx="20" cy="20" r="8" fill="#fff"/><circle cx="26.5" cy="26.5" r="4.5" fill="none" stroke="#0a84ff" stroke-width="2.4"/></svg>
+      <h3>Spotlight and zoom</h3><p>Dim everything except what you're pointing at, or open a zoom lens that follows the cursor so tiny text reads on a projector.</p></div>
+    <div><svg viewBox="0 0 40 40" aria-hidden="true"><rect x="2" y="2" width="36" height="36" rx="10" fill="#0a84ff"/><rect x="10" y="14" width="20" height="13" rx="3" fill="none" stroke="#fff" stroke-width="2.2"/><path d="M14 18h2M19 18h2M24 18h2M15 23h10" stroke="#fff" stroke-width="2.2" stroke-linecap="round"/></svg>
+      <h3>Your shortcuts, your look</h3><p>Every action has a global shortcut you can change, plus a menu bar menu. Colours, sizes and styles are all adjustable in Settings.</p></div>
+  </section>
+
+  <section class="sec">
+    <div>
+      <h2>Shortcuts that work in every app</h2>
+      <p>Defaults. Change any of them in the app's Settings.</p>
+      <div id="keylistPage"></div>
+    </div>
+    <div>
+      <h2>While you're drawing</h2>
+      <p>The toolbar has every tool; these keys are faster. Press <kbd>/</kbd> to see them on screen.</p>
+      <dl class="grid2" id="drawKeys"></dl>
+    </div>
+  </section>
+  <footer>Built by <a href="https://github.com/thepiyushway">thepiyushway</a> with Claude · <a href="https://github.com/thepiyushway/overmark">Source and setup guide</a><br>Overmark reads only your pointer position while a cursor effect is on. Nothing is recorded or sent anywhere. Zoom captures a small area around the pointer on your Mac and keeps nothing.</footer>
+</div>
+
+<div id="settings">
+  <div class="st-top">
+    <div class="st-bar">
+      <canvas class="mark" id="mark2" width="72" height="72" aria-hidden="true" style="width:26px;height:26px"></canvas>
+      <span class="brand" style="font-size:16px">Overmark</span>
+      <div class="acts"><button class="btn" id="secondary" type="button" hidden></button><button class="btn primary" id="primary" type="button" hidden></button></div>
+    </div>
+    <div class="tabs" role="tablist" id="tabs"></div>
+  </div>
+  <p class="banner" id="status2" role="status" aria-live="polite"></p>
+  <div class="pane" id="pane"></div>
+</div>
+
+<div id="hud" role="status" aria-live="polite"></div>
+<div id="surface">
+  <canvas id="ink"></canvas>
+  <canvas id="fx"></canvas>
+  <textarea id="note" hidden spellcheck="false" aria-label="Text annotation"></textarea>
+  <div class="tb" id="bar" role="toolbar" aria-label="Drawing tools"></div>
+  <div id="cheat" hidden></div>
+</div>
+
+<script>
+{
+// ============================================================ basics
+const $ = (s) => document.querySelector(s);
+const root = document.documentElement;
+const surface = $('#surface'), ink = $('#ink'), fxc = $('#fx'), ctx = ink.getContext('2d'), fctx = fxc.getContext('2d');
+const note = $('#note'), bar = $('#bar');
+const load = (k, d) => { try { const v = localStorage.getItem('overmark.' + k); return v == null ? d : JSON.parse(v); } catch { return d; } };
+const save = (k, v) => { try { localStorage.setItem('overmark.' + k, JSON.stringify(v)); } catch {} };
+const esc = (t) => String(t).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const STANDALONE = !!window.claude?.standalone; // the downloadable Mac app (Electron) rather than the Claude app
+
+// ============================================================ settings model
+const DEFAULT_CFG = {
+  palette: ['#ff3b30', '#ff9f0a', '#ffd60a', '#30d158', '#0a84ff', '#ffffff'],
+  gradient: ['#ff2d95', '#ffb000'],
+  widthScale: 1,
+  autoErase: false, eraseAfter: 3,
+  board: 'white',
+  toolbarPos: 'top', showToolbar: true, tips: true,
+  hl: { shape: 'circle', size: 56, color: '#ffd60a', opacity: 0.32, border: 'solid', borderWidth: 3, glow: true, anim: 'none', hideIdle: true, idleMs: 1500 },
+  spot: { shape: 'circle', size: 190, dim: 0.62, feather: 26 },
+  zoom: { level: 2.5, size: 240, shape: 'circle', border: true },
+};
+function mergeDeep(base, over) {
+  const out = Array.isArray(base) ? base.slice() : { ...base };
+  if (!over || typeof over !== 'object') return out;
+  for (const k of Object.keys(base)) {
+    if (!(k in over)) continue;
+    const b = base[k], o = over[k];
+    if (b && typeof b === 'object' && !Array.isArray(b)) out[k] = mergeDeep(b, o);
+    else if (Array.isArray(b)) out[k] = Array.isArray(o) && o.length === b.length ? o.slice() : b.slice();
+    else if (typeof o === typeof b) out[k] = o;
+  }
+  return out;
+}
+let CFG = mergeDeep(DEFAULT_CFG, load('cfg', {}));
+const getPath = (o, p) => p.split('.').reduce((a, k) => a?.[k], o);
+const setPath = (o, p, v) => { const ks = p.split('.'); const last = ks.pop(); ks.reduce((a, k) => a[k], o)[last] = v; };
+let cfgSaveTimer = 0;
+const saveCfg = () => { clearTimeout(cfgSaveTimer); cfgSaveTimer = setTimeout(() => save('cfg', CFG), 150); };
+
+const WIDTHS = [3, 6, 11];
+const TEXT_SIZES = [22, 32, 46];
+const COLOR_NAMES = ['Colour 1', 'Colour 2', 'Colour 3', 'Colour 4', 'Colour 5', 'Colour 6', 'Gradient'];
+const I = (d) => `<svg viewBox="0 0 24 24" aria-hidden="true">${d}</svg>`;
+const TOOLS = [
+  { id: 'pen', key: 'p', label: 'Pen', icon: I('<path d="M4 20l4-1L19 8l-3-3L5 16z"/>') },
+  { id: 'marker', key: 'm', label: 'Highlighter', icon: I('<path d="M4 20h7M7 16l9-9 3 3-9 9H7z"/>') },
+  { id: 'line', key: 'l', label: 'Line', icon: I('<path d="M5 19L19 5"/>') },
+  { id: 'arrow', key: 'a', label: 'Arrow', icon: I('<path d="M5 19L19 5M10 5h9v9"/>') },
+  { id: 'rect', key: 'r', label: 'Box', icon: I('<rect x="4" y="6" width="16" height="12" rx="1.5"/>') },
+  { id: 'ellipse', key: 'o', label: 'Circle', icon: I('<ellipse cx="12" cy="12" rx="8.5" ry="6.5"/>') },
+  { id: 'text', key: 't', label: 'Text', icon: I('<path d="M6 6h12M12 6v13"/>') },
+];
+const TWO_POINT = new Set(['line', 'arrow', 'rect', 'ellipse']);
+
+const S = {
+  tool: load('tool', 'pen'), color: load('color', 0), width: load('width', 1),
+  mode: 'page', drawing: false, strokes: [], redo: [], current: null,
+  cursor: null, lastMove: 0, hl: false, spot: false, zoom: false, board: false,
+  layers: { screen: { strokes: [], redo: [] }, board: { strokes: [], redo: [] } },
+};
+if (S.color > 6) S.color = 0;
+
+// ============================================================ canvas sizing
+let W = 0, H = 0;
+function fitCanvas() {
+  const dpr = window.devicePixelRatio || 1;
+  W = surface.clientWidth; H = surface.clientHeight;
+  for (const [cv, c] of [[ink, ctx], [fxc, fctx]]) {
+    cv.width = Math.max(1, Math.round(W * dpr)); cv.height = Math.max(1, Math.round(H * dpr));
+    c.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  dirty = true; kick();
+}
+new ResizeObserver(fitCanvas).observe(surface);
+
+// ============================================================ stroke drawing
+function paint(c, s, p0, p1) {
+  if (s.color !== 'gradient') return s.color;
+  const [a, b] = s.g || CFG.gradient;
+  const gr = c.createLinearGradient(p0[0], p0[1], p1[0] === p0[0] && p1[1] === p0[1] ? p1[0] + 1 : p1[0], p1[1]);
+  gr.addColorStop(0, a); gr.addColorStop(1, b);
+  return gr;
+}
+function bbox(pts) {
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (const [x, y] of pts) { x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y); }
+  return [[x0, y0], [x1, y1]];
+}
+function drawStroke(c, s, alpha) {
+  if (alpha <= 0) return;
+  const p = s.pts;
+  c.save();
+  c.lineCap = c.lineJoin = 'round';
+  if (s.tool === 'text') {
+    c.globalAlpha = alpha;
+    c.font = `700 ${s.size}px "Schibsted Grotesk", system-ui, sans-serif`;
+    c.textBaseline = 'top';
+    const lines = s.text.split('\n');
+    const wmax = Math.max(...lines.map((l) => c.measureText(l).width));
+    c.fillStyle = paint(c, s, p[0], [p[0][0] + wmax, p[0][1]]);
+    c.shadowColor = s.color === '#ffffff' ? 'rgba(0,0,0,.7)' : 'rgba(0,0,0,.28)';
+    c.shadowBlur = 3; c.shadowOffsetY = 1;
+    lines.forEach((line, i) => c.fillText(line, p[0][0] + 5, p[0][1] + 4 + i * s.size * 1.2));
+    c.restore();
+    return;
+  }
+  const [b0, b1] = TWO_POINT.has(s.tool) ? [p[0], p[p.length - 1]] : bbox(p);
+  c.strokeStyle = c.fillStyle = paint(c, s, b0, b1);
+  const marker = s.tool === 'marker';
+  c.globalAlpha = alpha * (marker ? 0.38 : 1);
+  c.lineWidth = marker ? s.w * 3.4 : s.w;
+  if (!marker) { c.shadowColor = 'rgba(0,0,0,.3)'; c.shadowBlur = Math.max(2, s.w * 0.7); c.shadowOffsetY = 1; }
+  c.beginPath();
+  if (s.tool === 'pen' || marker) {
+    if (p.length === 1) { c.arc(p[0][0], p[0][1], c.lineWidth / 2, 0, Math.PI * 2); c.fill(); c.restore(); return; }
+    c.moveTo(p[0][0], p[0][1]);
+    for (let i = 1; i < p.length - 1; i++) c.quadraticCurveTo(p[i][0], p[i][1], (p[i][0] + p[i + 1][0]) / 2, (p[i][1] + p[i + 1][1]) / 2);
+    const last = p[p.length - 1];
+    c.lineTo(last[0], last[1]);
+    c.stroke();
+  } else {
+    const [a, b] = [p[0], p[p.length - 1]];
+    if (s.tool === 'rect') c.strokeRect(Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.abs(b[0] - a[0]), Math.abs(b[1] - a[1]));
+    else if (s.tool === 'ellipse') { c.ellipse((a[0] + b[0]) / 2, (a[1] + b[1]) / 2, Math.abs(b[0] - a[0]) / 2, Math.abs(b[1] - a[1]) / 2, 0, 0, Math.PI * 2); c.stroke(); }
+    else if (s.tool === 'line') { c.moveTo(a[0], a[1]); c.lineTo(b[0], b[1]); c.stroke(); }
+    else if (s.tool === 'arrow') {
+      const ang = Math.atan2(b[1] - a[1], b[0] - a[0]);
+      const head = Math.max(16, s.w * 4.2);
+      c.moveTo(a[0], a[1]); c.lineTo(b[0] - Math.cos(ang) * head * 0.6, b[1] - Math.sin(ang) * head * 0.6); c.stroke();
+      c.beginPath();
+      c.moveTo(b[0], b[1]);
+      c.lineTo(b[0] - head * Math.cos(ang - 0.45), b[1] - head * Math.sin(ang - 0.45));
+      c.lineTo(b[0] - head * Math.cos(ang + 0.45), b[1] - head * Math.sin(ang + 0.45));
+      c.closePath(); c.fill();
+    }
+  }
+  c.restore();
+}
+function drawBoard(c) {
+  if (!S.board) return;
+  const dark = CFG.board === 'dark';
+  c.save();
+  c.fillStyle = dark ? '#16171a' : '#fbfbf8';
+  c.fillRect(0, 0, W, H);
+  if (CFG.board === 'grid' || dark) {
+    c.fillStyle = dark ? 'rgba(255,255,255,.08)' : 'rgba(0,0,0,.12)';
+    for (let x = 16; x < W; x += 28) for (let y = 16; y < H; y += 28) c.fillRect(x, y, 2, 2);
+  }
+  c.restore();
+}
+
+// ============================================================ cursor effects (shared by overlay, demo and previews)
+function shapePath(c, shape, x, y, r) {
+  c.beginPath();
+  if (shape === 'squircle') c.roundRect(x - r, y - r, 2 * r, 2 * r, r * 0.5);
+  else if (shape === 'rhombus') { c.moveTo(x, y - r * 1.15); c.lineTo(x + r * 1.15, y); c.lineTo(x, y + r * 1.15); c.lineTo(x - r * 1.15, y); c.closePath(); }
+  else if (shape === 'rounded') c.roundRect(x - r * 1.5, y - r, r * 3, r * 2, Math.min(28, r * 0.35));
+  else c.arc(x, y, r, 0, Math.PI * 2);
+}
+function drawHighlight(c, x, y, h, alpha = 1) {
+  const t = performance.now() / 1000;
+  let r = h.size / 2;
+  if (h.anim === 'pulse') r *= 1 + 0.09 * Math.sin(t * 5.5);
+  if (h.anim === 'breathe') alpha *= 0.62 + 0.38 * (0.5 + 0.5 * Math.sin(t * 2.6));
+  c.save();
+  c.globalAlpha = alpha;
+  if (h.glow) { c.shadowColor = h.color; c.shadowBlur = r * 0.6; }
+  shapePath(c, h.shape, x, y, r);
+  if (h.shape !== 'ring') {
+    c.globalAlpha = alpha * h.opacity;
+    c.fillStyle = h.color; c.fill();
+    c.globalAlpha = alpha;
+  }
+  const bw = h.shape === 'ring' ? Math.max(h.borderWidth, 5) : h.borderWidth;
+  if (h.border !== 'none' || h.shape === 'ring') {
+    c.lineWidth = bw;
+    c.strokeStyle = h.color;
+    c.setLineDash(h.border === 'dashed' ? [bw * 3, bw * 2] : h.border === 'dotted' ? [0.1, bw * 2.2] : []);
+    c.lineCap = 'round';
+    shapePath(c, h.shape === 'ring' ? 'circle' : h.shape, x, y, r);
+    c.stroke();
+  }
+  c.restore();
+}
+function drawSpotlight(c, x, y, sp, w, h) {
+  const r = sp.size / 2;
+  c.save();
+  c.fillStyle = `rgba(0,0,0,${sp.dim})`;
+  c.fillRect(0, 0, w, h);
+  c.globalCompositeOperation = 'destination-out';
+  c.shadowColor = '#000'; c.shadowBlur = sp.feather;
+  c.fillStyle = '#000';
+  shapePath(c, sp.shape, x, y, r);
+  c.fill();
+  c.restore();
+}
+let zoomImg = null;
+function lensRect(x, y) {
+  const L = CFG.zoom.size, src = L / CFG.zoom.level, off = src / 2 + 26 + L / 2;
+  let lx = x + off, ly = y + off;
+  if (lx + L / 2 > W - 8) lx = x - off;
+  if (ly + L / 2 > H - 8) ly = y - off;
+  return { lx: clamp(lx, L / 2 + 8, W - L / 2 - 8), ly: clamp(ly, L / 2 + 8, H - L / 2 - 8), L, src };
+}
+function drawLens(c, x, y) {
+  const { lx, ly, L, src } = lensRect(x, y);
+  const shape = CFG.zoom.shape === 'circle' ? 'circle' : 'squircle';
+  c.save();
+  c.shadowColor = 'rgba(0,0,0,.45)'; c.shadowBlur = 24; c.shadowOffsetY = 6;
+  c.fillStyle = '#111';
+  shapePath(c, shape, lx, ly, L / 2); c.fill();
+  c.shadowColor = 'transparent';
+  shapePath(c, shape, lx, ly, L / 2); c.clip();
+  if (zoomImg) c.drawImage(zoomImg, lx - L / 2, ly - L / 2, L, L);
+  else { c.fillStyle = 'rgba(255,255,255,.7)'; c.font = '600 14px "Schibsted Grotesk",system-ui'; c.textAlign = 'center'; c.fillText('Starting zoom…', lx, ly); }
+  c.strokeStyle = 'rgba(255,59,48,.85)'; c.lineWidth = 1.5;
+  c.beginPath(); c.moveTo(lx - 10, ly); c.lineTo(lx + 10, ly); c.moveTo(lx, ly - 10); c.lineTo(lx, ly + 10); c.stroke();
+  c.restore();
+  if (CFG.zoom.border) {
+    c.save(); c.lineWidth = 3; c.strokeStyle = '#fff'; shapePath(c, shape, lx, ly, L / 2); c.stroke();
+    c.lineWidth = 1; c.strokeStyle = 'rgba(0,0,0,.35)'; shapePath(c, shape, lx, ly, L / 2 + 2); c.stroke(); c.restore();
+  }
+  // where the lens is looking
+  c.save(); c.strokeStyle = 'rgba(255,255,255,.55)'; c.setLineDash([4, 4]); c.lineWidth = 1;
+  c.strokeRect(x - src / 2, y - src / 2, src, src); c.restore();
+}
+
+// ============================================================ render loop
+let dirty = true;
+const FADE_OUT = 900;
+const holdMs = () => CFG.eraseAfter * 1000;
+function renderInk() {
+  ctx.clearRect(0, 0, W, H);
+  drawBoard(ctx);
+  const now = Date.now();
+  if (CFG.autoErase) S.strokes = S.strokes.filter((s) => s.seed || now - s.done < holdMs() + FADE_OUT);
+  for (const s of S.strokes) {
+    const age = now - s.done;
+    const a = CFG.autoErase && !s.seed && age > holdMs() ? 1 - (age - holdMs()) / FADE_OUT : 1;
+    drawStroke(ctx, s, a);
+  }
+  if (S.current) drawStroke(ctx, S.current, 1);
+}
+function renderFx() {
+  fctx.clearRect(0, 0, W, H);
+  if (!S.cursor) return;
+  const [x, y] = S.cursor;
+  if (S.spot) drawSpotlight(fctx, x, y, CFG.spot, W, H);
+  if (S.hl) {
+    let a = 1;
+    if (CFG.hl.hideIdle) { const idle = Date.now() - S.lastMove; if (idle > CFG.hl.idleMs) a = Math.max(0, 1 - (idle - CFG.hl.idleMs) / 350); }
+    if (a > 0) drawHighlight(fctx, x, y, CFG.hl, a);
+  }
+  if (S.zoom) drawLens(fctx, x, y);
+}
+let raf = 0;
+function kick() { if (!raf) raf = requestAnimationFrame(frame); }
+function fxActive() { return S.hl || S.spot || S.zoom; }
+function frame() {
+  raf = 0;
+  const animating = S.current || (CFG.autoErase && S.strokes.some((s) => !s.seed));
+  if (dirty || animating) { renderInk(); dirty = false; }
+  renderFx();
+  if (S.mode === 'overlay' && !S.drawing) updateVisibility();
+  if (animating || fxActive()) kick();
+}
+const redraw = () => { dirty = true; kick(); };
+
+// ============================================================ drawing input
+const canDraw = () => S.mode === 'page' || (S.mode === 'overlay' && S.drawing);
+const pos = (e) => { const r = surface.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
+const curColor = () => (S.color === 6 ? 'gradient' : CFG.palette[S.color]);
+const curWidth = () => Math.round(WIDTHS[S.width] * CFG.widthScale * 10) / 10;
+
+surface.addEventListener('pointerdown', (e) => {
+  const where = e.target.closest('#bar') ? 'toolbar' : e.target.closest('#note') ? 'note' : e.target.closest('#cheat') ? 'cheat' : 'canvas';
+  if (S.mode === 'overlay') track('pointerdown', { canDraw: canDraw(), tool: S.tool, where, button: e.button, type: e.pointerType });
+  if (!canDraw() || e.button !== 0 || where !== 'canvas') return;
+  if (S.current) endStroke(); // a release we never heard about: keep that stroke instead of losing it
+  const pt = pos(e);
+  if (S.tool === 'text') { e.preventDefault(); openText(pt); return; }
+  commitText();
+  surface.setPointerCapture(e.pointerId);
+  S.current = { tool: S.tool, color: curColor(), g: CFG.gradient.slice(), w: curWidth(), pts: [pt] };
+  e.preventDefault();
+  redraw();
+});
+surface.addEventListener('pointermove', (e) => {
+  if (!S.current) return;
+  const pt = pos(e), p = S.current.pts;
+  if (TWO_POINT.has(S.current.tool)) p[1] = e.shiftKey ? snap(p[0], pt) : pt;
+  else { const l = p[p.length - 1]; if (Math.hypot(pt[0] - l[0], pt[1] - l[1]) > 1.2) p.push(pt); }
+  redraw();
+});
+function snap(a, b) { // shift: straight lines snap to 45°, boxes/circles become square/round
+  const dx = b[0] - a[0], dy = b[1] - a[1];
+  if (S.current.tool === 'rect' || S.current.tool === 'ellipse') { const m = Math.max(Math.abs(dx), Math.abs(dy)); return [a[0] + Math.sign(dx || 1) * m, a[1] + Math.sign(dy || 1) * m]; }
+  const ang = Math.round(Math.atan2(dy, dx) / (Math.PI / 4)) * (Math.PI / 4), len = Math.hypot(dx, dy);
+  return [a[0] + Math.cos(ang) * len, a[1] + Math.sin(ang) * len];
+}
+const endStroke = (how) => {
+  if (!S.current) return;
+  const s = S.current; S.current = null;
+  if (S.mode === 'overlay') track('stroke', { how: typeof how === 'string' ? how : 'next-down', tool: s.tool, pts: s.pts.length });
+  if (TWO_POINT.has(s.tool) && s.pts.length < 2) { redraw(); return; }
+  s.done = Date.now();
+  S.strokes.push(s); S.redo = [];
+  syncBar(); redraw(); updateVisibility();
+};
+// Finish strokes however the release arrives: in the surface, anywhere in the window, or when capture is lost.
+surface.addEventListener('pointerup', () => endStroke('up'));
+surface.addEventListener('pointercancel', () => endStroke('cancel'));
+surface.addEventListener('lostpointercapture', () => endStroke('lostcapture'));
+window.addEventListener('pointerup', () => endStroke('window-up'));
+window.addEventListener('blur', () => endStroke('blur'));
+
+function setCursor(p) {
+  if (!p) { if (S.cursor) { S.cursor = null; kick(); } return; }
+  if (!S.cursor || p[0] !== S.cursor[0] || p[1] !== S.cursor[1]) { S.cursor = p; S.lastMove = Date.now(); if (fxActive()) kick(); }
+}
+window.addEventListener('pointermove', (e) => {
+  const r = surface.getBoundingClientRect();
+  const inside = e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom;
+  if (inside) setCursor(pos(e)); else if (S.mode !== 'overlay') setCursor(null);
+});
+
+// ============================================================ text tool
+function openText(pt) {
+  commitText();
+  const size = TEXT_SIZES[S.width];
+  note.hidden = false; note.value = '';
+  note.dataset.x = pt[0]; note.dataset.y = pt[1];
+  const col = curColor();
+  Object.assign(note.style, { left: pt[0] + 'px', top: pt[1] + 'px', fontSize: size + 'px', color: col === 'gradient' ? CFG.gradient[0] : col,
+    fontFamily: '"Schibsted Grotesk", system-ui, sans-serif', width: '220px', height: size * 1.4 + 'px' });
+  note.focus();
+}
+function commitText() {
+  if (note.hidden) return;
+  const text = note.value.replace(/\s+$/, '');
+  note.hidden = true;
+  if (!text) return;
+  S.strokes.push({ tool: 'text', text, color: curColor(), g: CFG.gradient.slice(), size: TEXT_SIZES[S.width], pts: [[+note.dataset.x, +note.dataset.y]], done: Date.now() });
+  S.redo = [];
+  syncBar(); redraw(); updateVisibility();
+}
+note.addEventListener('input', () => { note.style.height = 'auto'; note.style.height = note.scrollHeight + 'px'; note.style.width = Math.max(220, note.scrollWidth + 12) + 'px'; });
+note.addEventListener('keydown', (e) => {
+  e.stopPropagation();
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); commitText(); }
+  if (e.key === 'Escape') { e.preventDefault(); note.value = ''; commitText(); }
+});
+note.addEventListener('blur', commitText);
+
+// ============================================================ actions
+let seeded = false;
+function undo() { commitText(); const s = S.strokes.pop(); if (s) S.redo.push(s); syncBar(); redraw(); updateVisibility(); }
+function redo() { const s = S.redo.pop(); if (s) { s.done = Date.now(); S.strokes.push(s); } syncBar(); redraw(); updateVisibility(); }
+function clearAll() {
+  if (seeded) seeded = 'cleared';
+  commitText();
+  if (S.strokes.length) { S.redo = S.strokes.reverse(); S.strokes = []; }
+  syncBar(); redraw(); updateVisibility();
+}
+function setTool(t) { commitText(); S.tool = t; save('tool', t); syncBar(); }
+function setColor(i) { S.color = i; save('color', i); if (!note.hidden) note.style.color = i === 6 ? CFG.gradient[0] : CFG.palette[i]; syncBar(); }
+function setWidth(i) { S.width = clamp(i, 0, 2); save('width', S.width); syncBar(); }
+function toggleErase() {
+  CFG.autoErase = !CFG.autoErase; saveCfg();
+  if (CFG.autoErase) { const now = Date.now(); S.strokes.forEach((s) => { s.done = now; }); }
+  syncBar(); redraw(); setTray(); bindRefresh();
+  if (S.mode === 'overlay') hud(CFG.autoErase ? `Auto-erase on: ink fades after ${CFG.eraseAfter} s` : 'Auto-erase off', 1600);
+}
+function toggleBoard(force) {
+  const on = force ?? !S.board;
+  if (on === S.board) return;
+  commitText();
+  const from = S.board ? 'board' : 'screen', to = on ? 'board' : 'screen';
+  S.layers[from] = { strokes: S.strokes, redo: S.redo };
+  ({ strokes: S.strokes, redo: S.redo } = S.layers[to]);
+  S.board = on;
+  if (on && S.mode === 'overlay' && !S.drawing) setDraw(true);
+  syncBar(); redraw(); setTray(); updateVisibility();
+}
+async function toggleFx(kind, force) {
+  const on = force ?? !S[kind];
+  if (kind === 'zoom' && on) {
+    const ok = await zoomAvailable();
+    if (!ok) {
+      if (S.mode === 'overlay') hud('Zoom needs one more permission. Open Settings → Spotlight & Zoom.', 4000);
+      else if (S.mode === 'page') say('Zoom works in the installed app, where it can see your screen.');
+      return;
+    }
+    S.hl = false; S.spot = false;
+  }
+  if (on && (kind === 'hl' || kind === 'spot')) S.zoom = false;
+  S[kind] = on;
+  syncBar(); setTray(); updateVisibility(); kick();
+  if (on) pollCursor();
+  if (S.zoom) zoomLoop();
+  if (S.mode === 'overlay' && !S.drawing) hud(`${{ hl: 'Cursor highlight', spot: 'Spotlight', zoom: 'Zoom' }[kind]} ${on ? 'on' : 'off'}`, 1300);
+}
+
+// ============================================================ toolbar
+function buildBar() {
+  const btn = (attrs, inner) => `<button type="button" ${attrs}>${inner}</button>`;
+  const swatches = CFG.palette.map((c, i) => btn(`data-color="${i}" title="${COLOR_NAMES[i]} (${i + 1})" aria-label="${COLOR_NAMES[i]}"`, `<span class="sw" style="background:${esc(c)}"></span>`));
+  swatches.push(btn('data-color="6" title="Gradient (7)" aria-label="Gradient ink"', `<span class="sw" style="background:linear-gradient(135deg,${esc(CFG.gradient[0])},${esc(CFG.gradient[1])})"></span>`));
+  bar.innerHTML = [
+    `<button type="button" class="grip only-overlay" data-grip title="Move toolbar">${I('<circle cx="9" cy="7" r="1"/><circle cx="15" cy="7" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="9" cy="17" r="1"/><circle cx="15" cy="17" r="1"/>')}</button>`,
+    ...TOOLS.map((t) => btn(`data-tool="${t.id}" title="${t.label} (${t.key.toUpperCase()})" aria-label="${t.label}"`, t.icon)),
+    '<span class="sep"></span>', ...swatches, '<span class="sep"></span>',
+    ...WIDTHS.map((w, i) => btn(`data-width="${i}" title="${['Thin', 'Medium', 'Thick'][i]}" aria-label="${['Thin', 'Medium', 'Thick'][i]} line"`, `<span class="dot" style="width:${4 + i * 4}px;height:${4 + i * 4}px"></span>`)),
+    '<span class="sep"></span>',
+    btn('data-act="undo" title="Undo (⌘Z)" aria-label="Undo"', I('<path d="M9 6L4 11l5 5"/><path d="M4 11h10a5 5 0 010 10h-3"/>')),
+    btn('data-act="redo" title="Redo (⇧⌘Z)" aria-label="Redo"', I('<path d="M15 6l5 5-5 5"/><path d="M20 11H10a5 5 0 000 10h3"/>')),
+    btn('data-act="clear" title="Clear all (X)" aria-label="Clear all"', I('<path d="M5 7h14M10 7V5h4v2M7 7l1 13h8l1-13"/>')),
+    '<span class="sep"></span>',
+    btn('data-act="erase" title="Auto-erase (E)" aria-label="Auto-erase"', I('<path d="M3 12h4"/><path d="M10 12h3" opacity=".7"/><path d="M16 12h2" opacity=".45"/><path d="M21 12h.5" opacity=".25"/>')),
+    btn('data-act="board" title="Whiteboard (B)" aria-label="Whiteboard"', I('<rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21l4-4 4 4"/>')),
+    btn('data-act="hl" title="Highlight cursor (H)" aria-label="Highlight cursor"', I('<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="2.5"/>')),
+    btn('data-act="spot" title="Spotlight (S)" aria-label="Spotlight"', I('<path d="M12 3v2M12 19v2M3 12h2M19 12h2"/><circle cx="12" cy="12" r="5"/>')),
+    btn('data-act="zoom" title="Zoom lens (Z)" aria-label="Zoom lens"', I('<circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5L21 21M8 10.5h5M10.5 8v5"/>')),
+    btn('data-act="help" title="Shortcuts (/)" aria-label="Show shortcuts"', I('<circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 015 0c0 1.7-2.5 2-2.5 4M12 17h.01"/>')),
+    '<button type="button" class="done only-overlay" data-act="done" title="Stop drawing (Esc)">Done</button>',
+  ].join('');
+  syncBar();
+}
+function syncBar() {
+  if (!bar.firstChild) return;
+  bar.querySelectorAll('[data-tool]').forEach((b) => b.setAttribute('aria-pressed', b.dataset.tool === S.tool));
+  bar.querySelectorAll('[data-color]').forEach((b) => b.setAttribute('aria-pressed', +b.dataset.color === S.color));
+  bar.querySelectorAll('[data-width]').forEach((b) => b.setAttribute('aria-pressed', +b.dataset.width === S.width));
+  const set = (a, v) => { const b = bar.querySelector(`[data-act=${a}]`); if (b) b.setAttribute('aria-pressed', !!v); };
+  set('erase', CFG.autoErase); set('board', S.board); set('hl', S.hl); set('spot', S.spot); set('zoom', S.zoom);
+  const z = bar.querySelector('[data-act=zoom]'); if (z) z.hidden = S.mode !== 'overlay';
+  bar.querySelector('[data-act=undo]').disabled = !S.strokes.length;
+  bar.querySelector('[data-act=redo]').disabled = !S.redo.length;
+  bar.querySelector('[data-act=clear]').disabled = !S.strokes.length;
+}
+bar.addEventListener('click', (e) => {
+  const b = e.target.closest('button');
+  if (!b) return;
+  if (b.dataset.tool) setTool(b.dataset.tool);
+  else if (b.dataset.color) setColor(+b.dataset.color);
+  else if (b.dataset.width) setWidth(+b.dataset.width);
+  else ({ undo, redo, clear: clearAll, erase: toggleErase, board: () => toggleBoard(), hl: () => toggleFx('hl'), spot: () => toggleFx('spot'),
+    zoom: () => toggleFx('zoom'), help: toggleCheat, done: () => setDraw(false) })[b.dataset.act]?.();
+});
+bar.addEventListener('pointerdown', (e) => {
+  if (!e.target.closest('[data-grip]')) return;
+  e.preventDefault();
+  const r = bar.getBoundingClientRect(), dx = e.clientX - r.left, dy = e.clientY - r.top;
+  const move = (ev) => Object.assign(bar.style, { left: ev.clientX - dx + 'px', top: ev.clientY - dy + 'px', bottom: 'auto', transform: 'none' });
+  const up = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); };
+  window.addEventListener('pointermove', move); window.addEventListener('pointerup', up);
+});
+
+// ============================================================ keys while drawing
+const DRAW_KEYS = [
+  [['P', 'M', 'L', 'A'], 'Pen, highlighter, line, arrow'],
+  [['R', 'O', 'T'], 'Box, circle, text'],
+  [['1', '–', '7'], 'Colours (7 is gradient)'],
+  [['−', '='], 'Thinner or thicker'],
+  [['⇧ Shift'], 'Hold while dragging: straight angles, perfect squares and circles'],
+  [['⌘ Command', 'Z'], 'Undo (add Shift to redo)'],
+  [['E', 'B'], 'Auto-erase, whiteboard'],
+  [['H', 'S', 'Z'], 'Highlight, spotlight, zoom'],
+  [['X'], 'Clear all ink'],
+  [['/'], 'Show these keys'],
+  [['Esc'], 'Stop drawing, keep ink, go back to your app'],
+];
+const keyCaps = (ks) => ks.map((k) => (k === '–' ? '<span class="plus">to</span>' : `<kbd>${k}</kbd>`)).join('');
+$('#drawKeys').innerHTML = DRAW_KEYS.map(([ks, d]) => `<dt>${keyCaps(ks)}</dt><dd>${d}</dd>`).join('');
+function toggleCheat(force) {
+  const c = $('#cheat');
+  const show = force ?? c.hidden;
+  if (show) c.innerHTML = `<div><h4>Drawing keys</h4><dl>${DRAW_KEYS.map(([ks, d]) => `<dt>${keyCaps(ks)}</dt><dd>${d}</dd>`).join('')}</dl></div>`;
+  c.hidden = !show;
+}
+$('#cheat').addEventListener('pointerdown', (e) => { e.stopPropagation(); toggleCheat(false); });
+
+document.addEventListener('keydown', (e) => {
+  if (recording || !canDraw() || e.target === note || e.target.closest?.('input,select,textarea')) return;
+  const k = e.key.toLowerCase();
+  if (!$('#cheat').hidden && k !== '/' && k !== '?') { toggleCheat(false); if (k === 'escape') { e.preventDefault(); return; } }
+  if ((e.metaKey || e.ctrlKey) && k === 'z') { e.preventDefault(); (e.shiftKey ? redo : undo)(); return; }
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  const tool = TOOLS.find((t) => t.key === k);
+  if (tool) setTool(tool.id);
+  else if (k >= '1' && k <= '7') setColor(+k - 1);
+  else if (k === '-' || k === '_') setWidth(S.width - 1);
+  else if (k === '=' || k === '+') setWidth(S.width + 1);
+  else if (k === 'e') toggleErase();
+  else if (k === 'b') toggleBoard();
+  else if (k === 'h') toggleFx('hl');
+  else if (k === 's') toggleFx('spot');
+  else if (k === 'z') toggleFx('zoom');
+  else if (k === '/' || k === '?') toggleCheat();
+  else if (k === 'x' || k === 'backspace' || k === 'delete') clearAll();
+  else if (k === 'escape' && S.mode === 'overlay') setDraw(false);
+  else return;
+  e.preventDefault();
+});
+
+// ============================================================ icons
+function drawMark(size) {
+  const c = document.createElement('canvas'); c.width = c.height = size;
+  const g = c.getContext('2d'), s = size / 256;
+  const grad = g.createLinearGradient(0, 0, 0, size);
+  grad.addColorStop(0, '#ff5a4f'); grad.addColorStop(1, '#e0221a');
+  g.fillStyle = grad; g.beginPath(); g.roundRect(14 * s, 14 * s, 228 * s, 228 * s, 54 * s); g.fill();
+  g.strokeStyle = '#fff'; g.lineCap = g.lineJoin = 'round'; g.lineWidth = 16 * s;
+  g.beginPath(); g.ellipse(112 * s, 122 * s, 62 * s, 44 * s, -0.25, 0.2, Math.PI * 1.85); g.stroke();
+  g.beginPath(); g.moveTo(150 * s, 160 * s); g.lineTo(196 * s, 200 * s); g.stroke();
+  g.beginPath(); g.moveTo(206 * s, 210 * s); g.lineTo(170 * s, 204 * s); g.lineTo(200 * s, 176 * s); g.closePath(); g.fillStyle = '#fff'; g.fill();
+  return c;
+}
+function trayIcon() {
+  const c = document.createElement('canvas'); c.width = c.height = 36;
+  const g = c.getContext('2d');
+  g.strokeStyle = '#000'; g.lineWidth = 3.2; g.lineCap = g.lineJoin = 'round';
+  g.beginPath(); g.ellipse(16, 17, 11, 8, -0.25, 0.25, Math.PI * 1.8); g.stroke();
+  g.beginPath(); g.moveTo(22, 23); g.lineTo(31, 31); g.stroke();
+  return c.toDataURL('image/png');
+}
+for (const id of ['#mark', '#mark2']) $(id).getContext('2d').drawImage(drawMark(72), 0, 0);
+
+// ============================================================ shortcuts model
+const DEFAULT_KEYS = {
+  annotate: 'Command+Shift+1', highlight: 'Command+Shift+2', spotlight: 'Command+Shift+7',
+  zoom: 'Command+Shift+8', annotateBare: 'Command+Shift+9', clear: 'Command+Shift+0', board: null, erase: null,
+};
+const ACTIONS = {
+  annotate: { label: 'Annotate screen', desc: 'Start or stop drawing, with the toolbar.', run: () => toggleDraw(false) },
+  annotateBare: { label: 'Annotate without controls', desc: 'Draw with the toolbar hidden. Keys still work.', run: () => toggleDraw(true) },
+  highlight: { label: 'Highlight cursor', desc: 'Show or hide the halo around your pointer.', run: () => toggleFx('hl') },
+  spotlight: { label: 'Spotlight', desc: 'Dim the screen except around your pointer.', run: () => toggleFx('spot') },
+  zoom: { label: 'Zoom lens', desc: 'Magnify what\'s under your pointer.', run: () => toggleFx('zoom') },
+  board: { label: 'Whiteboard', desc: 'Draw on a blank board instead of the screen.', run: () => toggleBoard() },
+  erase: { label: 'Auto-erase', desc: 'Make new ink fade after a few seconds.', run: () => toggleErase() },
+  clear: { label: 'Clear all ink', desc: 'Remove every mark on screen.', run: () => clearAll() },
+};
+let KEYS = { ...DEFAULT_KEYS, ...load('keys2', {}) };
+const MOD = { Command: ['⌘', 'Command'], Control: ['⌃', 'Control'], Alt: ['⌥', 'Option'], Shift: ['⇧', 'Shift'] };
+const short = (acc) => (acc ? acc.split('+').map((p) => MOD[p]?.[0] || p).join('') : '');
+const caps = (acc) => (acc ? acc.split('+').map((p) => (MOD[p] ? `<kbd><span class="sym">${MOD[p][0]}</span>${MOD[p][1]}</kbd>` : `<kbd>${esc(p)}</kbd>`)).join('<span class="plus">+</span>') : '<span class="unset">Not set</span>');
+let recording = null;
+function accFromEvent(e) {
+  let key = null;
+  if (/^Key[A-Z]$/.test(e.code)) key = e.code.slice(3);
+  else if (/^Digit\d$/.test(e.code)) key = e.code.slice(5);
+  else if (/^F([1-9]|1[0-2])$/.test(e.code)) key = e.code;
+  const mods = [e.metaKey && 'Command', e.ctrlKey && 'Control', e.altKey && 'Alt', e.shiftKey && 'Shift'].filter(Boolean);
+  return { key, mods, acc: key ? [...mods, key].join('+') : null };
+}
+function keyRows(editable) {
+  return Object.entries(ACTIONS).map(([id, a]) => `
+    <div class="krow${recording === id ? ' rec' : ''}">
+      <span class="kname">${a.label}<small>${a.desc}</small></span>
+      <span class="kcaps">${recording === id ? '<em>Press your shortcut… (Esc cancels)</em>' : caps(KEYS[id])}</span>
+      ${editable ? `<button class="link" type="button" data-rec="${id}">${recording === id ? 'Cancel' : 'Change'}</button>
+      <button class="link x" type="button" data-unset="${id}" title="Remove shortcut" aria-label="Remove shortcut for ${a.label}" ${KEYS[id] ? '' : 'disabled style="visibility:hidden"'}>×</button>` : '<span></span><span></span>'}
+    </div>`).join('');
+}
+function renderPageKeys() { $('#keylistPage').innerHTML = keyRows(false); }
+const keyMsg = (t, err = false) => { const m = $('#keyMsg'); if (m) { m.textContent = t; m.className = 'msg' + (err ? ' err' : ''); } };
+document.addEventListener('click', (e) => {
+  const r = e.target.closest('[data-rec]'), u = e.target.closest('[data-unset]');
+  if (r) { recording = recording === r.dataset.rec ? null : r.dataset.rec; keyMsg(''); renderPane(); }
+  if (u) { KEYS[u.dataset.unset] = null; save('keys2', KEYS); renderPane(); wireSystem(); }
+});
+document.addEventListener('keydown', (e) => {
+  if (!recording) return;
+  e.preventDefault(); e.stopImmediatePropagation();
+  if (e.key === 'Escape') { recording = null; renderPane(); return; }
+  const { key, mods, acc } = accFromEvent(e);
+  if (!key) return;
+  if (mods.length < 2) { keyMsg('Use two modifier keys plus a letter or number, for example ⌘ Command + ⇧ Shift + 1.', true); return; }
+  if (['Command+Shift+3', 'Command+Shift+4', 'Command+Shift+5'].includes(acc)) { keyMsg('macOS uses that for screenshots. Pick another.', true); return; }
+  const clash = Object.entries(KEYS).find(([id, v]) => v === acc && id !== recording);
+  if (clash) { keyMsg(`That's already used for ${ACTIONS[clash[0]].label}.`, true); return; }
+  KEYS[recording] = acc; save('keys2', KEYS); recording = null;
+  renderPane(); keyMsg('Saved. It works everywhere right away.');
+  wireSystem();
+}, true);
+
+// ============================================================ desktop app plumbing
+let D = null, winBounds = { x: 0, y: 0 }, displayId = null, polling = false, trayOn = false, fullAccess = false, PERMS = {};
+let shown = null;
+const OVERLAY_OPTS = { frame: false, transparent: true, alwaysOnTop: true, hasShadow: false, resizable: false, movable: false,
+  minimizable: false, maximizable: false, fullscreenable: false, roundedCorners: false, dragHeight: 0 };
+// dragHeight is the platform's own drag strip: keep it thinner than the header so its buttons stay clickable.
+const SETUP_OPTS = { titleBarStyle: 'hiddenInset', dragHeight: 12, width: 940, height: 760, minWidth: 720, minHeight: 600 };
+const status = $('#status'), status2 = $('#status2'), primary = $('#primary'), secondary = $('#secondary');
+const hudEl = $('#hud');
+let hudTimer = 0;
+function hud(html, ms = 3500) {
+  if (S.mode !== 'overlay') return;
+  hudEl.innerHTML = `<canvas class="mk" width="44" height="44"></canvas><span>${html}</span>`;
+  hudEl.querySelector('canvas').getContext('2d').drawImage(drawMark(44), 0, 0);
+  hudEl.classList.add('on');
+  clearTimeout(hudTimer);
+  hudTimer = setTimeout(() => { hudEl.classList.remove('on'); hudTimer = 0; setTimeout(updateVisibility, 300); }, ms);
+  updateVisibility();
+}
+const say = (t) => { status.textContent = t; status2.textContent = t; if (S.mode === 'overlay') hud(esc(t), 6000); };
+const errors = load('errors', []);
+function logErr(where, e) {
+  const msg = `${new Date().toISOString()} ${where}: ${e?.message || e}`;
+  console.warn(msg);
+  errors.push(msg); while (errors.length > 25) errors.shift();
+  save('errors', errors);
+  if (typeof track === 'function') track('error', { where, msg: String(e?.message || e).slice(0, 200) });
+}
+// Remote diagnostics: the latest state and recent events go to this artifact's own database,
+// in a per-person private doc, so problems can be read back and fixed. No keystrokes or text.
+const VERSION = '4.7';
+let DB = null, diagPath = null, events = [], logDirty = false, writing = false, flushTimer = 0;
+function track(ev, data) {
+  events.push({ t: new Date().toISOString().slice(11, 23), ev, ...(data || {}) });
+  while (events.length > 80) events.shift();
+  logDirty = true; clearTimeout(flushTimer); flushTimer = setTimeout(flush, 700);
+}
+async function flush() {
+  if (!DB || !diagPath || writing || !logDirty) return;
+  writing = true; logDirty = false;
+  try {
+    await DB.doc(diagPath).set(JSON.parse(JSON.stringify({ version: VERSION, updated: new Date().toISOString(), mode: S.mode, drawing: S.drawing,
+      shown, fx: { hl: S.hl, spot: S.spot, zoom: S.zoom }, strokes: S.strokes.length, perms: PERMS, keys: KEYS, winBounds, displayId, errors: errors.slice(-10), events })));
+  } catch (e) { console.warn('diag write', e); }
+  writing = false;
+  if (logDirty) flushTimer = setTimeout(flush, 900);
+}
+window.addEventListener('error', (e) => logErr('error', e.message));
+window.addEventListener('unhandledrejection', (e) => logErr('promise', e.reason));
+const button = (el, label, fn) => { el.hidden = !label; el.textContent = label || ''; el.onclick = fn ? () => { track('click', { label }); fn(); } : null; };
+
+async function applyOptions(opts) {
+  track('setOptions', { transparent: !!opts.transparent });
+  let n = 0;
+  try { n = +sessionStorage.getItem('overmark.optReloads') || 0; } catch {}
+  if (n >= 3) { say('Window setup is stuck. Quit Overmark and open it again.'); return null; }
+  try { sessionStorage.setItem('overmark.optReloads', n + 1); } catch {}
+  const r = await D.window.setOptions(opts).catch((e) => { say(e.message); logErr('setOptions', e); return null; });
+  track('setOptions result', { r }); await flush();
+  return r;
+}
+const settled = () => { try { sessionStorage.removeItem('overmark.optReloads'); } catch {} };
+
+async function pollCursor() {
+  if (polling || !D?.screen || S.mode !== 'overlay') return;
+  polling = true;
+  while (fxActive() && S.mode === 'overlay') {
+    try {
+      const p = await D.screen.getCursorScreenPoint();
+      setCursor([p.x - winBounds.x, p.y - winBounds.y]);
+    } catch (e) { logErr('cursor', e); break; }
+    await sleep(16);
+  }
+  polling = false;
+}
+
+// Zoom lens: captures a small square around the pointer with macOS `screencapture`
+// (needs Claude's full-access permission and macOS Screen Recording for Claude).
+async function zoomAvailable() {
+  if (S.mode !== 'overlay' || !D?.permissions) return false;
+  const st = await D.permissions.state('full-access').catch(() => 'unavailable');
+  fullAccess = st === 'granted';
+  return fullAccess;
+}
+let zoomRunning = false, zoomFile = null;
+async function zoomLoop() {
+  if (zoomRunning) return;
+  track('zoomLoop start');
+  zoomRunning = true; zoomImg = null;
+  try {
+    if (!zoomFile) zoomFile = (await D.os.tmpdir()).replace(/\/$/, '') + '/overmark-zoom.jpg';
+    let fails = 0;
+    while (S.zoom && S.mode === 'overlay') {
+      if (!S.cursor) { await sleep(50); continue; }
+      const src = Math.max(16, Math.round(CFG.zoom.size / CFG.zoom.level));
+      const gx = Math.round(winBounds.x + S.cursor[0] - src / 2), gy = Math.round(winBounds.y + S.cursor[1] - src / 2);
+      const r = await D.childProcess.exec(`/usr/sbin/screencapture -x -t jpg -R${gx},${gy},${src},${src} "${zoomFile}"`, { timeout: 4000 });
+      if (r.code !== 0) {
+        logErr('zoom', r.stderr || ('exit ' + r.code));
+        if (++fails > 3) { hud('Zoom couldn\'t capture the screen. Allow Claude in System Settings → Privacy & Security → Screen Recording.', 7000); break; }
+        await sleep(400); continue;
+      }
+      fails = 0;
+      const b64 = await D.fs.readFile(zoomFile, 'base64');
+      const img = new Image();
+      img.src = 'data:image/jpeg;base64,' + b64;
+      await img.decode().catch(() => {});
+      zoomImg = img; kick();
+      await sleep(25);
+    }
+  } catch (e) { logErr('zoom', e); hud('Zoom stopped: ' + esc(e.message), 5000); }
+  zoomRunning = false;
+  if (S.zoom && S.mode === 'overlay') { S.zoom = false; syncBar(); setTray(); }
+}
+
+async function coverDisplay() {
+  const [displays, p] = await Promise.all([D.screen.getAllDisplays(), D.screen.getCursorScreenPoint()]);
+  const inside = (d) => p.x >= d.bounds.x && p.x < d.bounds.x + d.bounds.width && p.y >= d.bounds.y && p.y < d.bounds.y + d.bounds.height;
+  const d = displays.find(inside) || displays[0];
+  if (!d) return;
+  // Cover the usable area (below the menu bar, above the Dock). macOS keeps windows out of
+  // those areas anyway; asking for the full bounds left the top edge hidden under the menu bar.
+  const area = d.workArea || d.bounds;
+  const cur = await D.window.getBounds().catch(() => null);
+  const same = cur && cur.x === area.x && cur.y === area.y && cur.width === area.width && cur.height === area.height;
+  if (d.id !== displayId || !same) {
+    await D.window.setBounds(area);
+    if (displayId !== null && d.id !== displayId) { S.strokes = []; S.redo = []; }
+    displayId = d.id;
+  }
+  winBounds = await D.window.getBounds();
+  track('cover', { display: d.id, area, bounds: winBounds });
+}
+
+function needsWindow() { return S.drawing || S.board || S.strokes.length > 0 || fxActive() || hudTimer !== 0; }
+function updateVisibility() {
+  if (S.mode !== 'overlay' || !D?.window) return;
+  const want = needsWindow();
+  if (want === shown) return;
+  shown = want;
+  track(want ? 'show' : 'hide', { why: { drawing: S.drawing, board: S.board, strokes: S.strokes.length, fx: fxActive(), hud: hudTimer !== 0 } });
+  (want ? D.window.show() : D.window.hide()).catch((e) => logErr('visibility', e));
+}
+let returning = false, lastReturn = 0;
+async function returnFocus() {
+  if (returning || S.drawing || S.mode !== 'overlay' || Date.now() - lastReturn < 2500) return;
+  returning = true; lastReturn = Date.now();
+  await D.window.hide().catch(() => {});
+  shown = false;
+  setTimeout(() => { returning = false; updateVisibility(); }, 450);
+}
+window.addEventListener('focus', () => track('focus', { drawing: S.drawing }));
+window.addEventListener('blur', () => track('blur', { drawing: S.drawing }));
+
+function toggleDraw(bare) {
+  if (S.mode === 'overlay') { if (S.drawing) setDraw(false); else setDraw(true, { bare }); }
+  else if (S.mode === 'setup') startOverlay({ draw: true, bare });
+}
+async function setDraw(on, opts = {}) {
+  track('setDraw', { on, bare: !!opts.bare, mode: S.mode });
+  if (S.mode !== 'overlay') return;
+  S.drawing = on;
+  root.classList.toggle('drawing', on);
+  root.classList.toggle('bare', on && (!!opts.bare || !CFG.showToolbar));
+  if (on) {
+    await coverDisplay().catch((e) => logErr('cover', e));
+    await D.window.setIgnoreMouseEvents(false).catch((e) => logErr('mouse', e));
+    shown = true;
+    await D.window.show().catch((e) => logErr('show', e));
+    if (CFG.tips && !load('seenDrawHint', false)) { save('seenDrawHint', true); hud('Draw anywhere. <kbd>/</kbd> shows keys, <kbd>Esc</kbd> when you\'re done.', 3500); }
+  } else {
+    commitText(); toggleCheat(false);
+    S.current = null;
+    if (S.board) toggleBoard(false);
+    await D.window.setIgnoreMouseEvents(true, { forward: true }).catch((e) => logErr('mouse', e));
+    if (document.hasFocus()) await returnFocus();
+  }
+  syncBar(); setTray(); redraw(); updateVisibility();
+}
+
+function setTray() {
+  if (!trayOn || !D?.tray) return;
+  const k = (id) => (KEYS[id] ? '   ' + short(KEYS[id]) : '');
+  D.tray.set({
+    icon: trayIcon(),
+    toolTip: 'Draw on your screen, highlight, spotlight and zoom',
+    menu: [
+      { label: S.drawing ? 'Stop annotating' : 'Annotate screen' + k('annotate'), click: () => toggleDraw(false) },
+      { label: 'Annotate without controls' + k('annotateBare'), click: () => toggleDraw(true) },
+      { label: 'Interactive mode (keep ink, use your apps)', enabled: S.drawing, click: () => setDraw(false) },
+      { label: 'Whiteboard' + k('board'), type: 'checkbox', checked: S.board, click: () => toggleBoard() },
+      { type: 'separator' },
+      { label: 'Highlight cursor' + k('highlight'), type: 'checkbox', checked: S.hl, click: () => toggleFx('hl') },
+      { label: 'Spotlight' + k('spotlight'), type: 'checkbox', checked: S.spot, click: () => toggleFx('spot') },
+      { label: 'Zoom' + k('zoom'), type: 'checkbox', checked: S.zoom, click: () => toggleFx('zoom') },
+      { type: 'separator' },
+      { label: 'Auto-erase ink' + k('erase'), type: 'checkbox', checked: CFG.autoErase, click: toggleErase },
+      { label: 'Clear ink' + k('clear'), enabled: S.strokes.length > 0, click: clearAll },
+      { type: 'separator' },
+      { label: 'Settings…', click: () => openSetup() },
+      { label: 'Reload Overmark (get updates)', click: async () => { track('reload'); await flush(); location.reload(); } },
+      { label: 'Show shortcuts', click: () => hud(welcomeKeys(), 7000) },
+    ],
+  }).catch((e) => logErr('tray', e));
+}
+function welcomeKeys() {
+  const parts = [['annotate', 'draw'], ['highlight', 'highlight'], ['spotlight', 'spotlight'], ['zoom', 'zoom'], ['clear', 'clear']]
+    .filter(([id]) => KEYS[id]).map(([id, l]) => `<kbd>${short(KEYS[id])}</kbd> ${l}`);
+  return parts.length ? parts.join(' &nbsp; ') : 'Use the menu bar icon to start.';
+}
+async function wireSystem() {
+  if (!D?.permissions || S.mode === 'page') return {};
+  const perms = await D.permissions.state().catch(() => ({}));
+  if (perms.shortcuts === 'granted') {
+    await D.globalShortcut.unregisterAll().catch(() => {});
+    for (const [id, a] of Object.entries(ACTIONS)) {
+      const acc = KEYS[id];
+      if (!acc) continue;
+      const ok = await D.globalShortcut.register(acc, () => { track('shortcut', { id, acc }); a.run(); }).catch((e) => { logErr('shortcut ' + acc, e); return false; });
+      track('register', { id, acc, ok });
+      if (!ok) { logErr('shortcut', `${acc} is taken by another app`); keyMsg(`${short(acc)} is already used by another app. Pick a different shortcut for ${a.label}.`, true); }
+    }
+  }
+  if (perms['menu-bar'] === 'granted') { trayOn = true; setTray(); }
+  return perms;
+}
+async function openSetup(tab) {
+  if (tab) save('tab', tab);
+  save('setup', true); settled();
+  await applyOptions(SETUP_OPTS);
+}
+async function startOverlay({ draw = false, bare = false } = {}) {
+  track('startOverlay', { draw, bare });
+  const res = await D.permissions.request(['overlay', 'shortcuts', 'menu-bar']).catch((e) => { say(e.message); return null; });
+  if (!res) return;
+  PERMS = { ...PERMS, ...res };
+  track('permsRequested', { res });
+  if (res.overlay !== 'granted') {
+    say('Overmark needs permission to draw over other apps.');
+    button(secondary, 'Open permissions', () => D.permissions.manage().catch(() => {}));
+    renderPane();
+    return;
+  }
+  if (draw) save('autodraw', bare ? 'bare' : 'full');
+  save('setup', false); settled();
+  const r = await applyOptions(OVERLAY_OPTS);
+  if (r && !r.reloading) {
+    if (r.applied === 'next_open') say('Almost there: quit Overmark and open it again to start the overlay.');
+    else enterOverlay();
+  }
+}
+async function enterOverlay() {
+  track('enterOverlay');
+  S.mode = 'overlay';
+  if (S.tool === 'text') S.tool = 'pen';
+  save('lastMode', 'overlay');
+  root.classList.remove('setup'); root.classList.add('overlay');
+  root.classList.toggle('tb-bottom', CFG.toolbarPos === 'bottom');
+  document.body.appendChild(surface);
+  await D.window.setIgnoreMouseEvents(true, { forward: true }).catch((e) => logErr('mouse', e));
+  await coverDisplay().catch((e) => logErr('cover', e));
+  D.window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true }).catch((e) => logErr('spaces', e));
+  const perms = await wireSystem();
+  buildBar(); fitCanvas();
+  const auto = load('autodraw', false);
+  if (auto) { save('autodraw', false); await setDraw(true, { bare: auto === 'bare' }); return; }
+  if (CFG.tips) hud(perms.shortcuts === 'granted' ? 'Overmark is on. ' + welcomeKeys() : 'Overmark is on. Use its menu bar icon to start.', 6500);
+  else updateVisibility();
+}
+
+// ============================================================ settings app (desktop window)
+const TABS = [
+  ['general', 'General', '<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/>'],
+  ['annotate', 'Annotate', '<path d="M4 20l4-1L19 8l-3-3L5 16z"/>'],
+  ['cursor', 'Cursor', '<path d="M5 3l14 8-6 2-2 6z"/>'],
+  ['spot', 'Spotlight & Zoom', '<circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5L21 21"/>'],
+  ['keys', 'Shortcuts', '<rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7 14h10"/>'],
+  ['about', 'About', '<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/>'],
+];
+let tab = load('tab', 'general');
+if (!TABS.some((t) => t[0] === tab)) tab = 'general';
+const row = (title, desc, control) => `<div class="row"><div><b>${title}</b>${desc ? `<small>${desc}</small>` : ''}</div><div class="ctl">${control}</div></div>`;
+const range = (p, min, max, step) => `<input type="range" data-cfg="${p}" min="${min}" max="${max}" step="${step}" aria-label="${p}"><output data-out="${p}"></output>`;
+const toggle = (p) => `<label class="swt"><input type="checkbox" data-cfg="${p}"><span></span></label>`;
+const select = (p, opts) => `<select data-cfg="${p}">${opts.map(([v, l]) => `<option value="${v}">${l}</option>`).join('')}</select>`;
+const color = (p) => `<input type="color" data-cfg="${p}" aria-label="${p}">`;
+const FMT = {
+  'hl.size': (v) => `${v} pt`, 'hl.opacity': (v) => `${Math.round(v * 100)}%`, 'hl.borderWidth': (v) => `${v} pt`, 'hl.idleMs': (v) => `${(v / 1000).toFixed(1)} s`,
+  'spot.size': (v) => `${v} pt`, 'spot.dim': (v) => `${Math.round(v * 100)}%`, 'spot.feather': (v) => `${v} pt`,
+  'zoom.level': (v) => `${(+v).toFixed(1)}×`, 'zoom.size': (v) => `${v} pt`, eraseAfter: (v) => `${v} s`, widthScale: (v) => `${Math.round(v * 100)}%`,
+};
+function permChip(k, label) {
+  const st = PERMS[k] || 'unknown';
+  return `<span class="chip${st === 'granted' ? ' ok' : ''}">${label}: ${st === 'granted' ? 'on' : st === 'prompt' ? 'not asked yet' : esc(st)}</span>`;
+}
+function paneHTML() {
+  if (tab === 'general') return `
+    <h2>Overlay</h2><div class="group">
+      ${row('Toolbar position', 'Where the drawing toolbar sits on screen.', select('toolbarPos', [['top', 'Top'], ['bottom', 'Bottom']]))}
+      ${row('Show toolbar when annotating', 'Off: annotate starts with the toolbar hidden.', toggle('showToolbar'))}
+      ${row('Tips', 'Short hints at the bottom of the screen when Overmark starts.', toggle('tips'))}
+      ${row('Keeps running', STANDALONE ? 'Closing this window keeps Overmark in your menu bar, with shortcuts on. Quit it from the menu bar icon.' : 'Closing this window or the overlay keeps Overmark in your menu bar, with shortcuts on. Use Quit in the Dock menu to stop it completely.', '')}
+    </div>
+    ${STANDALONE ? '' : `<h2>Permissions</h2><div class="group">
+      <div class="row" style="grid-template-columns:minmax(0,1fr)"><div><b>Claude permissions</b><small>Claude asks you before Overmark can use each of these.</small></div>
+        <div class="chips">${permChip('overlay', 'Draw over apps')}${permChip('shortcuts', 'Shortcuts')}${permChip('menu-bar', 'Menu bar')}${permChip('full-access', 'Zoom (full access)')}</div></div>
+      ${row('Manage', 'Turn any of them on or off.', '<button class="btn" type="button" data-do="perms">Open permissions</button>')}
+    </div>`}
+    <h2>Troubleshooting</h2><div class="group">
+      ${row('Diagnostics', 'Copy and share this if something doesn\'t respond.', '<button class="btn" type="button" data-do="copydiag">Copy</button>')}
+      <div class="row" style="grid-template-columns:1fr"><pre class="diag" id="diagText">Loading…</pre></div>
+    </div>`;
+  if (tab === 'annotate') return `
+    <h2>Colours</h2><div class="group">
+      ${row('Palette', 'The six colours on the toolbar (keys 1 to 6).', `<div class="pal">${CFG.palette.map((_, i) => color('palette.' + i)).join('')}</div>`)}
+      ${row('Gradient ink', 'Key 7. Strokes blend from the first colour to the second.', `<div class="pal">${color('gradient.0')}${color('gradient.1')}</div>`)}
+      ${row('Line weight', 'Scales thin, medium and thick together.', range('widthScale', 0.5, 2, 0.1))}
+    </div>
+    <h2>Auto-erase</h2><div class="group">
+      ${row('Erase ink automatically', 'Each mark fades out on its own, so you can keep presenting.', toggle('autoErase'))}
+      ${row('Erase after', 'How long a mark stays before it fades.', range('eraseAfter', 1, 15, 1))}
+    </div>
+    <h2>Whiteboard</h2><div class="group">
+      ${row('Board style', 'Press B while drawing, or use the menu bar. The board keeps its own ink.', select('board', [['white', 'White'], ['grid', 'White with dots'], ['dark', 'Dark with dots']]))}
+    </div>`;
+  if (tab === 'cursor') return `
+    <h2>Highlight</h2><div class="group">
+      ${row('Shape', '', select('hl.shape', [['circle', 'Circle'], ['ring', 'Ring'], ['squircle', 'Squircle'], ['rhombus', 'Rhombus']]))}
+      ${row('Size', '', range('hl.size', 24, 160, 2))}
+      ${row('Colour', '', color('hl.color'))}
+      ${row('Opacity', 'How solid the fill is.', range('hl.opacity', 0, 1, 0.02))}
+      ${row('Border style', '', select('hl.border', [['solid', 'Solid'], ['dashed', 'Dashed'], ['dotted', 'Dotted'], ['none', 'None']]))}
+      ${row('Border width', '', range('hl.borderWidth', 1, 10, 1))}
+      ${row('Glow', 'A soft glow around the highlight.', toggle('hl.glow'))}
+      ${row('Animation', 'Movement that draws the eye to your pointer.', select('hl.anim', [['none', 'None'], ['pulse', 'Pulse'], ['breathe', 'Breathe']]))}
+      ${row('Hide when inactive', 'Fades away when the pointer stops moving.', toggle('hl.hideIdle'))}
+      ${row('Hide after', '', range('hl.idleMs', 500, 5000, 100))}
+    </div>
+    <div class="preview" id="pvCursor"><div class="pv-doc"><b>Move your pointer here</b><i style="width:80%"></i><i style="width:62%"></i><i style="width:70%"></i><i style="width:45%"></i></div><canvas></canvas></div>
+    <p class="hint">Click ripples aren't available: Claude apps can't see clicks you make in other apps.</p>`;
+  if (tab === 'spot') return `
+    <h2>Spotlight</h2><div class="group">
+      ${row('Shape', '', select('spot.shape', [['circle', 'Circle'], ['rounded', 'Rounded rectangle'], ['squircle', 'Squircle']]))}
+      ${row('Size', '', range('spot.size', 80, 520, 10))}
+      ${row('Dim strength', 'How dark the rest of the screen gets.', range('spot.dim', 0.2, 0.9, 0.02))}
+      ${row('Soft edge', '', range('spot.feather', 0, 80, 2))}
+    </div>
+    <div class="preview" id="pvSpot"><div class="pv-doc"><b>Move your pointer here</b><i style="width:80%"></i><i style="width:62%"></i><i style="width:70%"></i><i style="width:45%"></i></div><canvas></canvas></div>
+    <h2>Zoom lens</h2><div class="group">
+      ${row('Status', fullAccess ? `Ready. If the lens stays black, allow ${STANDALONE ? 'Overmark' : 'Claude'} in System Settings → Privacy & Security → Screen Recording.`
+        : 'Zoom copies a small area around your pointer using macOS\'s own screenshot tool, so it needs Claude\'s "full access" permission for this app. macOS will also ask to let Claude record the screen.',
+        fullAccess ? '<span class="chip ok">On</span>' : '<button class="btn primary" type="button" data-do="zoomperm">Turn on zoom</button>')}
+      ${row('Magnification', '', range('zoom.level', 1.5, 5, 0.25))}
+      ${row('Lens size', '', range('zoom.size', 140, 420, 10))}
+      ${row('Lens shape', '', select('zoom.shape', [['circle', 'Circle'], ['rounded', 'Rounded square']]))}
+      ${row('Border', '', toggle('zoom.border'))}
+    </div>
+    <p class="hint">The lens sits just off the pointer so it never magnifies itself, and flips sides near screen edges.</p>`;
+  if (tab === 'keys') return `
+    <h2>Global shortcuts</h2>
+    <p class="hint" style="margin:0 0 10px">They work in every app while Overmark is running. Use two modifier keys plus a letter or number.</p>
+    <div class="group" style="padding:0 16px">${keyRows(true)}</div>
+    <p class="msg" id="keyMsg" aria-live="polite"></p>
+    <button class="link" type="button" data-do="resetkeys">Reset all to defaults</button>
+    <p class="hint">Stream Deck: add a Hotkey action with any shortcut above and the button controls Overmark.</p>
+    <h2>While drawing</h2><div class="group" style="padding:12px 16px"><dl class="grid2">${DRAW_KEYS.map(([ks, d]) => `<dt>${keyCaps(ks)}</dt><dd>${d}</dd>`).join('')}</dl></div>`;
+  return `<div class="about"><canvas id="aboutMark" width="176" height="176"></canvas><h3>Overmark</h3>
+    <p>Draw on your screen, highlight and spotlight your cursor, and zoom, in any app.</p>
+    <p>Built by <a href="https://github.com/thepiyushway">thepiyushway</a> with Claude${STANDALONE ? '. Standalone Mac edition' : ', and installed from Claude as a Mac app'}. No account, no subscription, nothing leaves your Mac.</p>
+    <p><a href= + REPO + >Source code and setup guide on GitHub</a></p>
+    <p style="font-size:13px">Version ${VERSION}</p>
+    <p style="font-size:13px">${STANDALONE ? 'Updates: download the latest release from GitHub.' : 'Each new version asks for its permissions again.'} Saved settings: ${esc(Object.keys(load('cfg', {})).length ? 'customised' : 'defaults')}.</p>
+    <p><button class="btn" type="button" data-do="reload">Reload to latest version</button> <button class="btn" type="button" data-do="resetall">Reset all settings</button></p></div>`;
+}
+function renderTabs() {
+  $('#tabs').innerHTML = TABS.map(([id, label, path]) =>
+    `<button class="tab" role="tab" type="button" data-tab="${id}" aria-selected="${id === tab}">${I(path).replace('viewBox="0 0 24 24"', 'viewBox="0 0 24 24"')}${label}</button>`).join('');
+}
+function renderPane() {
+  if (S.mode !== 'setup') { renderPageKeys(); return; }
+  renderTabs();
+  $('#pane').innerHTML = paneHTML();
+  bindControls($('#pane'));
+  if (tab === 'cursor') preview('#pvCursor', (c, x, y, w, h) => drawHighlight(c, x, y, CFG.hl, idleAlpha()));
+  if (tab === 'spot') preview('#pvSpot', (c, x, y, w, h) => drawSpotlight(c, x, y, CFG.spot, w, h));
+  if (tab === 'general') fillDiagnostics();
+  if (tab === 'about') $('#aboutMark').getContext('2d').drawImage(drawMark(176), 0, 0);
+}
+$('#tabs').addEventListener('click', (e) => { const b = e.target.closest('[data-tab]'); if (!b) return; tab = b.dataset.tab; save('tab', tab); recording = null; renderPane(); });
+function bindControls(rootEl) {
+  rootEl.querySelectorAll('[data-cfg]').forEach((el) => {
+    const p = el.dataset.cfg, v = getPath(CFG, p);
+    if (el.type === 'checkbox') el.checked = !!v; else el.value = v;
+    const out = rootEl.querySelector(`[data-out="${p}"]`);
+    if (out) out.textContent = FMT[p] ? FMT[p](v) : v;
+    el.addEventListener('input', () => {
+      const nv = el.type === 'checkbox' ? el.checked : el.type === 'range' ? +el.value : el.value;
+      setPath(CFG, p, nv); saveCfg();
+      if (out) out.textContent = FMT[p] ? FMT[p](nv) : nv;
+      onCfgChange(p);
+    });
+  });
+}
+function bindRefresh() { if (S.mode === 'setup') rerenderControls(); }
+function rerenderControls() { $('#pane').querySelectorAll('[data-cfg]').forEach((el) => { const v = getPath(CFG, el.dataset.cfg); if (el.type === 'checkbox') el.checked = !!v; else el.value = v; }); }
+function onCfgChange(p) {
+  if (p.startsWith('palette') || p.startsWith('gradient')) buildBar();
+  if (p === 'toolbarPos') root.classList.toggle('tb-bottom', CFG.toolbarPos === 'bottom');
+  redraw(); setTray();
+}
+let pvState = null;
+function idleAlpha() {
+  if (!CFG.hl.hideIdle || !pvState) return 1;
+  const idle = Date.now() - pvState.last;
+  return idle > CFG.hl.idleMs ? Math.max(0, 1 - (idle - CFG.hl.idleMs) / 350) : 1;
+}
+function preview(sel, draw) {
+  const box = $(sel); if (!box) return;
+  const cv = box.querySelector('canvas'), c = cv.getContext('2d');
+  pvState = { x: null, y: null, last: Date.now() };
+  const st = pvState;
+  const fit = () => { const dpr = devicePixelRatio || 1; cv.width = box.clientWidth * dpr; cv.height = box.clientHeight * dpr; c.setTransform(dpr, 0, 0, dpr, 0, 0); };
+  fit(); new ResizeObserver(fit).observe(box);
+  box.addEventListener('pointermove', (e) => { const r = box.getBoundingClientRect(); st.x = e.clientX - r.left; st.y = e.clientY - r.top; st.last = Date.now(); });
+  box.addEventListener('pointerleave', () => { st.x = null; });
+  const loop = () => {
+    if (!box.isConnected) return;
+    const w = box.clientWidth, h = box.clientHeight;
+    c.clearRect(0, 0, w, h);
+    const t = Date.now() / 900;
+    const x = st.x ?? w / 2 + Math.cos(t) * w * 0.22, y = st.y ?? h / 2 + Math.sin(t * 1.3) * h * 0.18;
+    if (st.x == null) st.last = Date.now();
+    draw(c, x, y, w, h);
+    c.save(); c.fillStyle = '#111'; c.strokeStyle = '#fff'; c.lineWidth = 1.2;
+    c.beginPath(); c.moveTo(x, y); c.lineTo(x, y + 17); c.lineTo(x + 4.5, y + 13); c.lineTo(x + 8, y + 20); c.lineTo(x + 10.5, y + 19); c.lineTo(x + 7, y + 12); c.lineTo(x + 12, y + 12); c.closePath(); c.fill(); c.stroke(); c.restore();
+    requestAnimationFrame(loop);
+  };
+  loop();
+}
+async function fillDiagnostics() {
+  const el = $('#diagText'); if (!el) return;
+  const displays = await D?.screen?.getAllDisplays().catch(() => null);
+  const applied = await D?.window?.getOptions().then((o) => o.applied).catch(() => null);
+  el.textContent = JSON.stringify({ permissions: PERMS, windowOptions: applied, displays: displays?.map((d) => ({ id: d.id, label: d.label, bounds: d.bounds })), shortcuts: KEYS, errors }, null, 2);
+}
+document.addEventListener('click', async (e) => {
+  const b = e.target.closest('[data-do]'); if (!b) return;
+  const act = b.dataset.do;
+  if (act === 'perms') D?.permissions.manage().then(refreshPerms).catch(() => {});
+  if (act === 'copydiag') navigator.clipboard.writeText($('#diagText').textContent).then(() => say('Diagnostics copied.'), () => say('Copy failed.'));
+  if (act === 'reload') { track('reload'); await flush(); location.reload(); return; }
+  if (act === 'resetkeys') { KEYS = { ...DEFAULT_KEYS }; save('keys2', KEYS); renderPane(); wireSystem(); }
+  if (act === 'resetall') { CFG = mergeDeep(DEFAULT_CFG, {}); save('cfg', CFG); KEYS = { ...DEFAULT_KEYS }; save('keys2', KEYS); buildBar(); renderPane(); wireSystem(); say('Settings reset.'); }
+  if (act === 'zoomperm') {
+    const r = await D.permissions.request(['full-access']).catch((er) => { say(er.message); return null; });
+    if (r) PERMS = { ...PERMS, ...r };
+    fullAccess = PERMS['full-access'] === 'granted';
+    if (fullAccess) {
+      // One test capture now, so macOS asks for Screen Recording here and not mid-presentation.
+      try {
+        const f = (await D.os.tmpdir()).replace(/\/$/, '') + '/overmark-zoom-test.jpg';
+        await D.childProcess.exec(`/usr/sbin/screencapture -x -t jpg -R0,0,40,40 "${f}"`, { timeout: 8000 });
+        say('Zoom is ready. If macOS asked about Screen Recording, allow Claude.');
+      } catch (er) { logErr('zoom test', er); say('Zoom permission granted, but the test capture failed: ' + er.message); }
+    } else if (PERMS['full-access'] === 'unavailable') say('Full access isn\'t available for this app on your account, so zoom stays off.');
+    renderPane();
+  }
+});
+async function refreshPerms() { PERMS = await D.permissions.state().catch(() => PERMS); fullAccess = PERMS['full-access'] === 'granted'; renderPane(); }
+
+// ============================================================ landing demo annotations
+function seedDemo() {
+  if (S.mode !== 'page' || (S.strokes.length && !seeded)) return;
+  const sr = surface.getBoundingClientRect();
+  const at = (el, fx, fy) => { const r = el.getBoundingClientRect(); return [r.left - sr.left + r.width * fx, r.top - sr.top + r.height * fy]; };
+  const peak = $('#peak'), rowEl = $('#hotRow'), kpi = $('#kpiChurn');
+  if (!peak || !rowEl || !kpi || sr.width < 200) return;
+  const [px, py] = at(peak, 0.5, 0.5);
+  const [kx0, ky0] = at(kpi, -0.04, -0.06), [kx1, ky1] = at(kpi, 1.04, 1.08);
+  const [rx0, ry] = at(rowEl, 0.01, 0.5), [rx1] = at(rowEl, 0.99, 0.5);
+  const mk = (tool, color, w, pts, extra = {}) => ({ tool, color, w, pts, done: 0, seed: true, ...extra });
+  const seeds = [mk('ellipse', '#ff3b30', 5, [[px - 34, py - 26], [px + 34, py + 26]]), mk('marker', '#ffd60a', 6, [[rx0, ry], [rx1, ry]])];
+  if (kpi.getBoundingClientRect().width > 0) seeds.push(mk('rect', '#0a84ff', 4, [[kx0, ky0], [kx1, ky1]]));
+  if (sr.width >= 560) {
+    seeds.push(mk('arrow', 'gradient', 5, [[px - 150, py + 14], [px - 42, py + 2]], { g: ['#ff2d95', '#ff3b30'] }));
+    seeds.push(mk('text', 'gradient', 0, [[px - 340, py - 8]], { text: 'Launch day', size: 30, g: ['#ff2d95', '#ff3b30'] }));
+  }
+  S.strokes = S.strokes.filter((x) => !x.seed);
+  seeds.forEach((sd, i) => setTimeout(() => { if (seeded !== 'cleared') { S.strokes.push(sd); syncBar(); redraw(); } }, 250 + i * 260));
+  seeded = true;
+}
+new ResizeObserver(() => { if (S.mode === 'page' && seeded === true && S.strokes.every((x) => x.seed)) { S.strokes = []; seedDemo(); } }).observe(document.body);
+
+// ============================================================ boot
+async function boot() {
+  $('#stage').appendChild(surface);
+  buildBar(); fitCanvas(); renderPageKeys();
+  const landing = () => { S.mode = 'page'; root.classList.remove('overlay', 'setup'); buildBar(); requestAnimationFrame(seedDemo); };
+  if (!window.claude?.use) { landing(); say('Open this page in Claude to install it as a Mac app.'); return; }
+  D = await window.claude.use('desktop').catch(() => null);
+  if (!D?.window) {
+    landing();
+    const st = await D?.install?.state().catch(() => 'unavailable');
+    const ib = $('#install');
+    if (st === 'available') {
+      say('Installs as a Mac app from Claude. No account, no subscription.');
+      ib.hidden = false;
+      ib.onclick = async () => {
+        const r = await D.install.request().catch(() => 'failed');
+        if (r === 'installed') say('Installing. Open Overmark from your Dock, then click Start.');
+        else if (r === 'failed') say('Install failed. Try again from the artifact menu: Install as app.');
+      };
+    } else if (st === 'installed') say('Installed on this Mac. Open Overmark from your Dock or Applications.');
+    else say('Open this page in the Claude desktop app to install it as a Mac app.');
+    return;
+  }
+  // Diagnostics live under data/users/<id>/: private to each person, so a shared copy never mixes logs.
+  DB = await window.claude.use('db').catch(() => null);
+  const U = await window.claude.use('user').catch(() => null);
+  const uid = await U?.id?.().catch(() => null);
+  if (DB && uid) diagPath = `data/users/${uid}/diag`;
+  D.app.dock.setIcon(drawMark(256).toDataURL('image/png')).catch(() => {});
+  PERMS = await D.permissions.state().catch(() => ({}));
+  fullAccess = PERMS['full-access'] === 'granted';
+  const { applied = {} } = await D.window.getOptions().catch(() => ({}));
+  const isOverlayWindow = applied.transparent === true && applied.frame === false;
+  track('boot', { perms: PERMS, applied, setupFlag: load('setup', false), isOverlayWindow, ua: navigator.userAgent.slice(-60) });
+  if (PERMS.overlay === 'granted' && !load('setup', false)) {
+    if (isOverlayWindow) { settled(); return enterOverlay(); }
+    const r = await applyOptions(OVERLAY_OPTS);
+    if (r && !r.reloading && r.applied === 'now') { settled(); return enterOverlay(); }
+    if (r?.reloading) return;
+  }
+  if (isOverlayWindow) { await applyOptions(SETUP_OPTS); return; }
+  if (applied.titleBarStyle !== 'hiddenInset') { const r = await applyOptions(SETUP_OPTS); if (r?.reloading) return; }
+  settled();
+  track('settingsWindow');
+  // Settings window
+  S.mode = 'setup';
+  save('lastMode', 'setup');
+  root.classList.remove('overlay'); root.classList.add('setup');
+  if (PERMS.overlay === 'granted') wireSystem();
+  say(PERMS.overlay === 'granted' ? '' : 'Allow Overmark to draw over other apps to get started.');
+  button(secondary, 'Annotate now', () => startOverlay({ draw: true }));
+  button(primary, PERMS.overlay === 'granted' ? 'Run in menu bar' : 'Get started', () => startOverlay());
+  renderPane();
+}
+boot().catch((e) => { console.error(e); logErr('boot', e); say('Something went wrong starting Overmark: ' + e.message); });
+}
+</script>
+</body>
+</html>
