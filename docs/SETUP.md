@@ -5,12 +5,16 @@
 1. Download `Overmark-<version>-arm64.dmg` (Apple Silicon) or `-x64.dmg` (Intel) from the repo's Releases page.
 2. Open the DMG and drag **Overmark** into **Applications**.
 3. Open Overmark. Builds without a Developer ID signature are blocked the first time: right-click Overmark → **Open** → **Open**. On macOS 15 and later, go to System Settings → Privacy & Security → **Open Anyway**.
-4. Overmark runs from the **menu bar**, so there's no Dock icon. The Settings window opens on first launch.
-5. Click **Run in menu bar**, or **Annotate now** to start drawing straight away.
+4. The Settings window opens on first launch. Click **Run in menu bar**, or **Annotate now** to start drawing straight away.
+5. From then on Overmark lives in the **menu bar**, with no Dock icon. Open it again from Applications or Spotlight at any time to bring Settings back.
 6. **Zoom** (optional): press ⌘⇧8 or go to Settings → Spotlight & Zoom. macOS asks to let Overmark record the screen. Allow it in System Settings → Privacy & Security → **Screen Recording**, then quit and reopen Overmark from its menu bar icon.
 7. **Open at login** (optional): menu bar icon → **Open at login**.
 
 Quit from the menu bar icon → **Quit Overmark**. Closing the Settings window keeps it running.
+
+**Updates:** you'll get a notification when a new version is out. Click the menu bar icon → **Install update**, and Overmark replaces itself and reopens. This works when Overmark is in Applications. If you run it from inside the DMG, it opens the download page instead.
+
+**If macOS says Overmark "is damaged"**: this free build isn't notarized by Apple. Run `xattr -dr com.apple.quarantine /Applications/Overmark.app` in Terminal once, then open it again.
 
 ## B. Claude app (inside the Claude desktop app)
 

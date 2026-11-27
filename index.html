@@ -290,6 +290,7 @@ const esc = (t) => String(t).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const STANDALONE = !!window.claude?.standalone; // the downloadable Mac app (Electron) rather than the Claude app
+const HOST = STANDALONE ? 'Overmark' : 'Claude'; // the app macOS asks about for Screen Recording
 
 // ============================================================ settings model
 const DEFAULT_CFG = {
@@ -899,7 +900,7 @@ function logErr(where, e) {
 }
 // Remote diagnostics: the latest state and recent events go to this artifact's own database,
 // in a per-person private doc, so problems can be read back and fixed. No keystrokes or text.
-const VERSION = '4.7';
+const VERSION = '4.8';
 let DB = null, diagPath = null, events = [], logDirty = false, writing = false, flushTimer = 0;
 function track(ev, data) {
   events.push({ t: new Date().toISOString().slice(11, 23), ev, ...(data || {}) });
@@ -968,7 +969,8 @@ async function zoomLoop() {
       const r = await D.childProcess.exec(`/usr/sbin/screencapture -x -t jpg -R${gx},${gy},${src},${src} "${zoomFile}"`, { timeout: 4000 });
       if (r.code !== 0) {
         logErr('zoom', r.stderr || ('exit ' + r.code));
-        if (++fails > 3) { hud('Zoom couldn\'t capture the screen. Allow Claude in System Settings → Privacy & Security → Screen Recording.', 7000); break; }
+        // 126/127: the capture command can't run at all, so retrying won't help.
+        if (r.code === 126 || r.code === 127 || ++fails > 3) { hud(`Zoom couldn't capture the screen. Allow ${HOST} in System Settings → Privacy & Security → Screen Recording.`, 7000); break; }
         await sleep(400); continue;
       }
       fails = 0;
@@ -1069,7 +1071,7 @@ function setTray() {
       { label: 'Clear ink' + k('clear'), enabled: S.strokes.length > 0, click: clearAll },
       { type: 'separator' },
       { label: 'Settings…', click: () => openSetup() },
-      { label: 'Reload Overmark (get updates)', click: async () => { track('reload'); await flush(); location.reload(); } },
+      { label: STANDALONE ? 'Reload Overmark' : 'Reload Overmark (get updates)', click: async () => { track('reload'); await flush(); location.reload(); } },
       { label: 'Show shortcuts', click: () => hud(welcomeKeys(), 7000) },
     ],
   }).catch((e) => logErr('tray', e));
@@ -1208,7 +1210,7 @@ function paneHTML() {
       ${row('Hide after', '', range('hl.idleMs', 500, 5000, 100))}
     </div>
     <div class="preview" id="pvCursor"><div class="pv-doc"><b>Move your pointer here</b><i style="width:80%"></i><i style="width:62%"></i><i style="width:70%"></i><i style="width:45%"></i></div><canvas></canvas></div>
-    <p class="hint">Click ripples aren't available: Claude apps can't see clicks you make in other apps.</p>`;
+    <p class="hint">Click ripples aren't available: ${STANDALONE ? 'Overmark doesn\'t' : 'Claude apps can\'t'} watch clicks you make in other apps.</p>`;
   if (tab === 'spot') return `
     <h2>Spotlight</h2><div class="group">
       ${row('Shape', '', select('spot.shape', [['circle', 'Circle'], ['rounded', 'Rounded rectangle'], ['squircle', 'Squircle']]))}
@@ -1240,8 +1242,8 @@ function paneHTML() {
     <p>Built by <a href="https://github.com/thepiyushway">thepiyushway</a> with Claude${STANDALONE ? '. Standalone Mac edition' : ', and installed from Claude as a Mac app'}. No account, no subscription, nothing leaves your Mac.</p>
     <p><a href= + REPO + >Source code and setup guide on GitHub</a></p>
     <p style="font-size:13px">Version ${VERSION}</p>
-    <p style="font-size:13px">${STANDALONE ? 'Updates: download the latest release from GitHub.' : 'Each new version asks for its permissions again.'} Saved settings: ${esc(Object.keys(load('cfg', {})).length ? 'customised' : 'defaults')}.</p>
-    <p><button class="btn" type="button" data-do="reload">Reload to latest version</button> <button class="btn" type="button" data-do="resetall">Reset all settings</button></p></div>`;
+    <p style="font-size:13px">${STANDALONE ? 'Updates: Overmark checks GitHub twice a day and tells you when a new version is ready. Install it from the menu bar icon → Install update.' : 'Updates arrive automatically. Each new version asks for its permissions again.'} Saved settings: ${esc(Object.keys(load('cfg', {})).length ? 'customised' : 'defaults')}.</p>
+    <p>${STANDALONE ? '<button class="btn" type="button" data-do="updates">Check for updates</button>' : '<button class="btn" type="button" data-do="reload">Reload to latest version</button>'} <button class="btn" type="button" data-do="resetall">Reset all settings</button></p></div>`;
 }
 function renderTabs() {
   $('#tabs').innerHTML = TABS.map(([id, label, path]) =>
@@ -1320,6 +1322,14 @@ document.addEventListener('click', async (e) => {
   if (act === 'perms') D?.permissions.manage().then(refreshPerms).catch(() => {});
   if (act === 'copydiag') navigator.clipboard.writeText($('#diagText').textContent).then(() => say('Diagnostics copied.'), () => say('Copy failed.'));
   if (act === 'reload') { track('reload'); await flush(); location.reload(); return; }
+  if (act === 'updates') {
+    say('Checking for updates…');
+    const st = await D.app.checkForUpdates().catch((e) => ({ status: 'error', error: e.message }));
+    if (st.status === 'available') say(`Version ${esc(st.latest.version)} is available. Click the Overmark menu bar icon → Install update.`);
+    else if (st.status === 'current') say(`You're on the latest version (${esc(st.latest?.version || VERSION)}).`);
+    else say('Couldn\'t check for updates: ' + esc(st.error || 'try again later') + '.');
+    return;
+  }
   if (act === 'resetkeys') { KEYS = { ...DEFAULT_KEYS }; save('keys2', KEYS); renderPane(); wireSystem(); }
   if (act === 'resetall') { CFG = mergeDeep(DEFAULT_CFG, {}); save('cfg', CFG); KEYS = { ...DEFAULT_KEYS }; save('keys2', KEYS); buildBar(); renderPane(); wireSystem(); say('Settings reset.'); }
   if (act === 'zoomperm') {
@@ -1331,7 +1341,7 @@ document.addEventListener('click', async (e) => {
       try {
         const f = (await D.os.tmpdir()).replace(/\/$/, '') + '/overmark-zoom-test.jpg';
         await D.childProcess.exec(`/usr/sbin/screencapture -x -t jpg -R0,0,40,40 "${f}"`, { timeout: 8000 });
-        say('Zoom is ready. If macOS asked about Screen Recording, allow Claude.');
+        say(`Zoom is ready. If macOS asked about Screen Recording, allow ${HOST}.`);
       } catch (er) { logErr('zoom test', er); say('Zoom permission granted, but the test capture failed: ' + er.message); }
     } else if (PERMS['full-access'] === 'unavailable') say('Full access isn\'t available for this app on your account, so zoom stays off.');
     renderPane();
@@ -1395,8 +1405,10 @@ async function boot() {
   fullAccess = PERMS['full-access'] === 'granted';
   const { applied = {} } = await D.window.getOptions().catch(() => ({}));
   const isOverlayWindow = applied.transparent === true && applied.frame === false;
-  track('boot', { perms: PERMS, applied, setupFlag: load('setup', false), isOverlayWindow, ua: navigator.userAgent.slice(-60) });
-  if (PERMS.overlay === 'granted' && !load('setup', false)) {
+  track('boot', { perms: PERMS, applied, setupFlag: load('setup', STANDALONE), isOverlayWindow, ua: navigator.userAgent.slice(-60) });
+  if (STANDALONE) D.app.onReopen?.(() => openSetup());
+  // The standalone app has every permission from the start: show Settings on first launch instead of disappearing into the menu bar.
+  if (PERMS.overlay === 'granted' && !load('setup', STANDALONE)) {
     if (isOverlayWindow) { settled(); return enterOverlay(); }
     const r = await applyOptions(OVERLAY_OPTS);
     if (r && !r.reloading && r.applied === 'now') { settled(); return enterOverlay(); }

@@ -38,3 +38,19 @@ Switching between `setup` and `overlay` calls `window.setOptions`, which rebuild
 
 ## Standalone shim
 `desktop/preload.js` exposes `window.claude.use("desktop")` with the same shape as Claude's API. Every call goes over a single `ipcRenderer.invoke('om', method, args)` channel to `desktop/main.js`. Shortcut and menu callbacks stay in the renderer and are triggered by id. `window.setOptions` saves the options and rebuilds the `BrowserWindow`. The app hides its Dock icon (`LSUIElement`) and stays in the menu bar when its windows close.
+
+### Security limits in the standalone app
+The page asks the app to do things over one IPC channel. `main.js` only allows:
+- `childProcess.exec`: exactly `/usr/sbin/screencapture -x -t jpg -R<x>,<y>,<w>,<h> "<file in the temp folder>"`;
+- `fs` calls inside the temp folder.
+
+Anything else gets `EPERM`. Navigation away from the bundled page is blocked, and HTTPS links open in the browser. The renderer runs sandboxed with context isolation.
+
+### Updater (`desktop/updater.js`)
+Apple's built-in update framework (Squirrel.Mac) requires a paid Developer ID, so Overmark updates itself:
+1. Reads `api.github.com/repos/thepiyushway/overmark/releases` and picks the newest version by semver precedence. Pre-releases are offered only to people already on one.
+2. Downloads `Overmark-<version>-<arch>-mac.zip` and compares its SHA-256 with `SHA256SUMS.txt` from the same release.
+3. Unpacks it with `ditto`, then checks `CFBundleIdentifier = app.overmark.Overmark` and `codesign --verify --deep --strict`.
+4. A small script waits for Overmark to exit, swaps the bundle (keeping the old one until the new one is in place), and reopens it.
+
+The download isn't marked as quarantined, because the app fetched it itself, so Gatekeeper doesn't block the new version. If the app can't be replaced, for example when run from the DMG under `/Volumes` or a read-only folder, it opens the release page instead.

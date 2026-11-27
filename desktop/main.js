@@ -5,6 +5,7 @@ const path = require('path');
 const fs = require('fs');
 const os = require('os');
 const { exec } = require('child_process');
+const updater = require('./updater');
 
 if (!app.requestSingleInstanceLock()) app.quit();
 
@@ -13,6 +14,7 @@ const PAGE = path.join(__dirname, 'app', 'index.html');
 const ALLOWED = ['titleBarStyle', 'trafficLightPosition', 'frame', 'transparent', 'alwaysOnTop', 'vibrancy', 'visualEffectState', 'movable', 'resizable',
   'minimizable', 'maximizable', 'fullscreenable', 'hasShadow', 'roundedCorners', 'backgroundColor', 'width', 'height', 'minWidth', 'minHeight', 'maxWidth', 'maxHeight'];
 
+let lastMenu = [];
 let win = null, tray = null, quitting = false, savedOptions = {}, appliedOptions = {}, ignoring = false;
 
 function loadOptions() { try { return JSON.parse(fs.readFileSync(STATE_FILE(), 'utf8')); } catch { return {}; } }
@@ -46,6 +48,7 @@ function rebuild(opts) {
   win = createWindow(opts);
   if (old) { old.removeAllListeners('close'); old.destroy(); }
   if (tray) { tray.destroy(); tray = null; } // the new page sets its own menu bar item
+  lastMenu = [];
 }
 
 // ---------------------------------------------------------------- IPC: the desktop API
@@ -56,6 +59,7 @@ const handlers = {
     setImmediate(() => rebuild(savedOptions));
     return { applied: 'now', reloading: true, options: savedOptions };
   },
+  'updates.check': async () => updater.check(),
   'window.getOptions': async () => ({ options: savedOptions, applied: appliedOptions }),
   'window.place': async () => { const [w, h] = win.getSize(); return { width: w, height: h }; },
   'window.show': async () => {
@@ -82,20 +86,27 @@ const handlers = {
   'notification.show': async ({ body }) => { new Notification({ title: 'Overmark', body: String(body).slice(0, 300) }).show(); },
   'tray.set': async (opts) => { setTray(opts); return true; },
   'tray.remove': async () => { tray?.destroy(); tray = null; },
-  'fs.readFile': async (p, enc) => fs.promises.readFile(expand(p), enc || undefined),
-  'fs.writeFile': async (p, d, enc) => fs.promises.writeFile(expand(p), d, enc || undefined),
-  'fs.exists': async (p) => fs.existsSync(expand(p)),
+  // The page only needs the zoom lens: screencapture into the temp folder, then read the image back.
+  // Nothing else is allowed, so a public build can't be made to run commands or touch other files.
+  'fs.readFile': async (p, enc) => fs.promises.readFile(inTmp(p), enc || undefined),
+  'fs.writeFile': async (p, d, enc) => fs.promises.writeFile(inTmp(p), d, enc || undefined),
+  'fs.exists': async (p) => fs.existsSync(inTmp(p)),
   'childProcess.exec': (cmd, opts = {}) => new Promise((resolve) => {
-    exec(cmd, { timeout: opts.timeout || 30000, cwd: opts.cwd ? expand(opts.cwd) : os.homedir(), maxBuffer: 8 * 1024 * 1024 }, (err, stdout, stderr) =>
+    const m = /^\/usr\/sbin\/screencapture -x -t jpg -R-?\d+,-?\d+,\d+,\d+ "([^"]+)"$/.exec(String(cmd));
+    if (!m) return resolve({ stdout: '', stderr: 'EPERM: only the zoom capture is allowed', code: 126, signal: null, truncated: false });
+    try { inTmp(m[1]); } catch (e) { return resolve({ stdout: '', stderr: e.message, code: 126, signal: null, truncated: false }); }
+    exec(cmd, { timeout: Math.min(opts.timeout || 8000, 15000), cwd: os.tmpdir(), maxBuffer: 1024 * 1024 }, (err, stdout, stderr) =>
       resolve({ stdout: String(stdout), stderr: String(stderr), code: err ? (typeof err.code === 'number' ? err.code : 1) : 0, signal: err?.signal || null, truncated: false }));
   }),
   'os.platform': async () => process.platform, 'os.arch': async () => process.arch,
   'os.tmpdir': async () => os.tmpdir(), 'os.homedir': async () => os.homedir(),
-  'shell.openPath': async (p) => { await shell.openPath(expand(p)); },
-  'shell.showItemInFolder': async (p) => { shell.showItemInFolder(expand(p)); },
-  'shell.trashItem': async (p) => { await shell.trashItem(expand(p)); },
 };
-const expand = (p) => (p.startsWith('~/') ? path.join(os.homedir(), p.slice(2)) : path.isAbsolute(p) ? p : path.join(os.homedir(), p));
+const TMP = fs.realpathSync(os.tmpdir());
+const inTmp = (p) => {
+  const abs = path.resolve(TMP, String(p));
+  if (abs !== TMP && !abs.startsWith(TMP + path.sep) && !abs.startsWith(os.tmpdir() + path.sep)) throw new Error('EPERM: outside the temp folder');
+  return abs;
+};
 ipcMain.handle('om', async (e, method, args) => {
   if (!win || e.sender !== win.webContents) throw new Error('EPERM: unknown window');
   const h = handlers[method];
@@ -104,7 +115,9 @@ ipcMain.handle('om', async (e, method, args) => {
 });
 
 // ---------------------------------------------------------------- menu bar item
+let lastTrayOpts = null;
 function setTray(opts) {
+  lastTrayOpts = opts;
   const icon = opts.icon ? nativeImage.createFromDataURL(opts.icon).resize({ height: 18 }) : nativeImage.createEmpty();
   if (opts.iconIsTemplate !== false) icon.setTemplateImage(true);
   if (!tray) tray = new Tray(icon); else tray.setImage(icon);
@@ -118,20 +131,30 @@ function setTray(opts) {
     return m;
   });
   const items = toItems(opts.menu || []);
-  items.push({ type: 'separator' },
+  items.push({ type: 'separator' }, ...updater.menuItems(),
     { label: 'Open at login', type: 'checkbox', checked: app.getLoginItemSettings().openAtLogin, click: (mi) => app.setLoginItemSettings({ openAtLogin: mi.checked }) },
     { label: 'Quit Overmark', accelerator: 'Command+Q', click: () => { quitting = true; app.quit(); } });
   tray.setContextMenu(Menu.buildFromTemplate(items));
+  lastMenu = items;
 }
+// The end-to-end test (tests/standalone_e2e.js) reads the menu bar menu and the window through this hook. Off in normal use.
+if (process.env.OVERMARK_TEST === '1') global.__overmark = { menu: () => lastMenu, win: () => win, ignoring: () => ignoring, updater };
 
 // ---------------------------------------------------------------- lifecycle
 app.whenReady().then(() => {
   if (process.platform === 'darwin') app.dock?.hide(); // menu bar app: no Dock icon to remove or lose
   savedOptions = loadOptions();
   win = createWindow(savedOptions);
+  updater.start(() => { if (tray && lastTrayOpts) setTray(lastTrayOpts); }); // refresh the menu's update item
 });
-app.on('second-instance', () => { if (win && !appliedOptions.transparent) { win.show(); win.focus(); } });
-app.on('activate', () => { if (win && !appliedOptions.transparent) win.show(); });
+// Opening the app again while it runs (it has no Dock icon) brings up Settings rather than doing nothing.
+function reopen() {
+  if (!win) return;
+  if (appliedOptions.transparent) win.webContents.send('om:reopen');
+  else { win.show(); win.focus(); app.focus({ steal: true }); }
+}
+app.on('second-instance', reopen);
+app.on('activate', reopen);
 app.on('before-quit', () => { quitting = true; });
 app.on('window-all-closed', () => {}); // stay in the menu bar
 app.on('will-quit', () => globalShortcut.unregisterAll());

@@ -23,6 +23,14 @@ jobs:
         with: { python-version: "3.12" }
       - run: pip install playwright pillow && python -m playwright install --with-deps chromium
       - run: python tests/smoke_test.py
+      - uses: actions/setup-node@v4
+        with: { node-version: "20" }
+      - name: End-to-end test of the standalone app (Electron, 33 steps)
+        working-directory: desktop
+        run: |
+          sudo apt-get install -y xvfb >/dev/null
+          npm install --no-audit --no-fund
+          xvfb-run -a -s "-screen 0 1440x900x24" npm test
 
   build:
     name: Build macOS app
@@ -34,6 +42,13 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: "20" }
+      - name: Check the tag matches the app version
+        if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
+        working-directory: desktop
+        run: |
+          TAG="${{ github.event.inputs.tag || github.ref_name }}"
+          VER="$(node -p "require('./package.json').version")"
+          [ "${TAG#v}" = "$VER" ] || { echo "Tag $TAG doesn't match desktop/package.json version $VER. Bump the version first."; exit 1; }
       - name: Install
         working-directory: desktop
         run: npm install --no-audit --no-fund
