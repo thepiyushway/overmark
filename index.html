@@ -985,7 +985,7 @@ function logErr(where, e) {
 }
 // Remote diagnostics: the latest state and recent events go to this artifact's own database,
 // in a per-person private doc, so problems can be read back and fixed. No keystrokes or text.
-const VERSION = '4.8';
+const VERSION = '4.9';
 let DB = null, diagPath = null, events = [], logDirty = false, writing = false, flushTimer = 0;
 function track(ev, data) {
   events.push({ t: new Date().toISOString().slice(11, 23), ev, ...(data || {}) });
