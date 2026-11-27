@@ -13,15 +13,15 @@ jobs:
     name: Web smoke test + standalone app end-to-end (flow + every feature)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with: { python-version: "3.12" }
       - name: Web app smoke test
         run: |
           pip install playwright pillow
           python -m playwright install --with-deps chromium
           python tests/smoke_test.py
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with: { node-version: "20" }
       - name: Install a stand-in for macOS screencapture (so the zoom lens is tested too)
         run: |

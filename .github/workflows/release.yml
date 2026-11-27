@@ -31,7 +31,7 @@ jobs:
       publish: ${{ steps.v.outputs.publish }}
       prerelease: ${{ steps.v.outputs.prerelease }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with: { fetch-depth: 0 }
       - id: v
         run: |
@@ -50,13 +50,13 @@ jobs:
     name: Build, check and publish the macOS app
     needs: [tests, version]
     if: needs.version.outputs.publish == 'true'
-    runs-on: macos-14
+    runs-on: macos-latest
     env:
       CSC_IDENTITY_AUTO_DISCOVERY: "false"
       VERSION: ${{ needs.version.outputs.version }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with: { node-version: "20" }
       - name: Install
         working-directory: desktop
