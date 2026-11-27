@@ -50,7 +50,8 @@
       "extendInfo": {
         "LSUIElement": true,
         "NSAppleEventsUsageDescription": "Overmark does not control other apps."
-      }
+      },
+      "artifactName": "Overmark-${version}-${arch}-mac.${ext}"
     },
     "dmg": {
       "title": "Overmark ${version}",
@@ -72,8 +73,6 @@
         "height": 380
       }
     },
-    "zip": {
-      "artifactName": "Overmark-${version}-${arch}-mac.${ext}"
-    }
+    "publish": null
   }
 }
