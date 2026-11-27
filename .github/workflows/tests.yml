@@ -1,0 +1,41 @@
+name: Tests
+
+# Every push to main and every pull request runs the full test suites.
+# The release workflow calls this too, so nothing ships without passing it.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_call:
+
+jobs:
+  test:
+    name: Web smoke test + standalone app end-to-end (flow + every feature)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - name: Web app smoke test
+        run: |
+          pip install playwright pillow
+          python -m playwright install --with-deps chromium
+          python tests/smoke_test.py
+      - uses: actions/setup-node@v4
+        with: { node-version: "20" }
+      - name: Install a stand-in for macOS screencapture (so the zoom lens is tested too)
+        run: |
+          sudo apt-get install -y xvfb >/dev/null
+          sudo mkdir -p /usr/local/share/overmark
+          sudo cp tests/fixtures/zoom-pattern.jpg /usr/local/share/overmark/
+          sudo cp tests/fixtures/fake-screencapture.sh /usr/sbin/screencapture
+          sudo chmod +x /usr/sbin/screencapture
+      - name: Install the app
+        working-directory: desktop
+        run: npm install --no-audit --no-fund
+      - name: Standalone app, user flow (33 steps)
+        working-directory: desktop
+        run: xvfb-run -a -s "-screen 0 1440x900x24" npm run test:flow
+      - name: Standalone app, every feature (69 steps)
+        working-directory: desktop
+        run: xvfb-run -a -s "-screen 0 1440x900x24" npm run test:features

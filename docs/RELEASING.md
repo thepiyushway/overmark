@@ -1,17 +1,30 @@
-# Releasing a new version
+# Branches and releases
 
-1. Make your changes and run the tests (see [TESTING.md](TESTING.md)).
-2. Bump `"version"` in `desktop/package.json`, for example `1.0.0` → `1.0.1`. A suffix such as `-beta.2` marks a pre-release. Commit and push to `main`.
-3. On GitHub, open **Actions → Test, build and release → Run workflow**. Enter the tag `v` + the version (e.g. `v1.0.1`) and click **Run workflow**. Pushing a `v*` tag does the same.
-4. The workflow then:
-   - runs both test suites;
-   - builds the Apple Silicon and Intel DMGs and zips on a Mac;
-   - checks the signatures and that the app launches;
-   - publishes the release with `SHA256SUMS.txt`.
+| Branch | What it holds | What happens on push |
+|---|---|---|
+| `main` | Everyday work: features, fixes, docs | All tests run (`tests.yml`). Nothing is published. |
+| `release` | What people are running | Tests run again. If the version is new, the Mac app is built, checked and published as a GitHub Release, and everyone's copy of Overmark offers the update. |
 
-   It refuses to release if the tag and the version don't match.
-5. Within 12 hours, everyone running Overmark gets a notification, and **Install update** appears in their menu bar menu.
+## Shipping an update
+1. Work on `main` (or on branches merged into `main`). Keep the tests green.
+2. When there's a meaningful change to share:
+   - bump `"version"` in `desktop/package.json`, e.g. `1.0.0` → `1.0.1` (fix), `1.1.0` (feature) or `2.0.0` (big change). A suffix such as `-beta.2` makes it a pre-release.
+   - add a `## <version>` section at the top of `CHANGELOG.md`. That text becomes the release notes users see under **What's new…**.
+3. Merge `main` into `release`. Either open a pull request from `main` to `release` on GitHub (the tests run on the PR), or locally:
+   ```bash
+   git checkout release && git merge --ff-only main && git push && git checkout main
+   ```
+4. The **Release** workflow does the rest. A push to `release` without a new version runs the tests and publishes nothing; it says so in the run summary.
 
-Updates follow the release type. People on a stable version are offered only stable releases; people on a beta are also offered newer betas.
+## What users see
+Within 12 hours of a release (or straight away, if they click **Check for updates…**), everyone running the downloadable app sees:
+- a macOS notification: "Version X is available";
+- a banner in Settings with an **Install update** button;
+- a short notice on screen the next time the overlay starts (once per version);
+- **Install update (version X)…** and **What's new…** in the menu bar menu.
 
-Release notes come from `.github/release-notes.md`. Edit it before step 3 to describe what changed.
+Installing downloads the new version and checks it against the release's `SHA256SUMS.txt`, its code signature and its app ID. It then replaces the app and reopens it.
+
+People on a stable version are offered only stable releases. People on a pre-release are also offered newer pre-releases.
+
+The Claude-app edition updates when the artifact is republished from a Claude session.

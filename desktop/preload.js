@@ -8,8 +8,9 @@ const call = (method, ...args) => ipcRenderer.invoke('om', method, args);
 const shortcutCallbacks = new Map();
 const trayCallbacks = new Map();
 let trayClick = null;
-let reopenCallback = null;
+let reopenCallback = null, updateCallback = null;
 ipcRenderer.on('om:reopen', () => reopenCallback?.());
+ipcRenderer.on('om:update', (_e, st) => updateCallback?.(st));
 ipcRenderer.on('om:shortcut', (_e, acc) => shortcutCallbacks.get(acc)?.());
 ipcRenderer.on('om:tray', (_e, id) => (id === '__click' ? trayClick?.() : trayCallbacks.get(id)?.({})));
 
@@ -52,7 +53,8 @@ const desktop = Object.freeze({
   },
   Menu: { setApplicationMenu: async () => {}, popup: async () => {} },
   // Standalone only: the app was opened again (Finder, Spotlight, Launchpad) while already running in the menu bar.
-  app: { onReopen: (cb) => { reopenCallback = typeof cb === 'function' ? cb : null; }, checkForUpdates: () => call('updates.check'), dock: { setIcon: (d) => call('dock.setIcon', d), setBadge: async () => false, setProgress: async () => false, setMenu: async () => false } },
+  app: { onReopen: (cb) => { reopenCallback = typeof cb === 'function' ? cb : null; }, getVersion: () => call('app.version'), checkForUpdates: () => call('updates.check'), updateState: () => call('updates.state'), installUpdate: () => call('updates.install'),
+    onUpdate: (cb) => { updateCallback = typeof cb === 'function' ? cb : null; }, dock: { setIcon: (d) => call('dock.setIcon', d), setBadge: async () => false, setProgress: async () => false, setMenu: async () => false } },
   screen: { getCursorScreenPoint: () => call('screen.getCursorScreenPoint'), getAllDisplays: () => call('screen.getAllDisplays') },
   globalShortcut: {
     register: async (acc, cb) => { const ok = await call('globalShortcut.register', acc); if (ok) shortcutCallbacks.set(acc, cb); return ok; },
@@ -60,6 +62,7 @@ const desktop = Object.freeze({
     unregisterAll: async () => { shortcutCallbacks.clear(); return call('globalShortcut.unregisterAll'); },
   },
   notification: { show: (o) => call('notification.show', o) },
+  clipboard: { writeText: (t) => call('clipboard.writeText', t) },
   tray: {
     set: async (opts) => { const gen = ++menuGeneration; pruneMenus(gen); trayClick = opts.click || null; return call('tray.set', { ...opts, click: undefined, menu: serializeMenu(opts.menu, gen) }); },
     remove: () => call('tray.remove'),

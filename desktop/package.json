@@ -12,7 +12,9 @@
     "start": "npm run sync && electron .",
     "dist": "npm run sync && electron-builder --mac dmg zip --arm64 --x64 --publish never",
     "dist:arm64": "npm run sync && electron-builder --mac dmg --arm64 --publish never",
-    "test": "npm run sync && node ../tests/standalone_e2e.js"
+    "test": "npm run sync && node ../tests/standalone_e2e.js && node ../tests/features_e2e.js",
+    "test:flow": "npm run sync && node ../tests/standalone_e2e.js",
+    "test:features": "npm run sync && node ../tests/features_e2e.js"
   },
   "devDependencies": {
     "electron": "33.2.1",

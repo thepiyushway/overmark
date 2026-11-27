@@ -1,6 +1,6 @@
 // Overmark standalone: hosts app/index.html (the same file published as the Claude app) in Electron
 // and implements the desktop API the page expects. Runs as a menu bar app with no Dock icon.
-const { app, BrowserWindow, ipcMain, screen, globalShortcut, Tray, Menu, nativeImage, Notification, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, screen, globalShortcut, Tray, Menu, nativeImage, Notification, shell, clipboard } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -59,7 +59,11 @@ const handlers = {
     setImmediate(() => rebuild(savedOptions));
     return { applied: 'now', reloading: true, options: savedOptions };
   },
+  'app.version': async () => app.getVersion(),
+  'clipboard.writeText': async (t) => { clipboard.writeText(String(t).slice(0, 200000)); return true; },
   'updates.check': async () => updater.check(),
+  'updates.state': async () => updater.getState(),
+  'updates.install': async () => updater.install(),
   'window.getOptions': async () => ({ options: savedOptions, applied: appliedOptions }),
   'window.place': async () => { const [w, h] = win.getSize(); return { width: w, height: h }; },
   'window.show': async () => {
@@ -145,7 +149,8 @@ app.whenReady().then(() => {
   if (process.platform === 'darwin') app.dock?.hide(); // menu bar app: no Dock icon to remove or lose
   savedOptions = loadOptions();
   win = createWindow(savedOptions);
-  updater.start(() => { if (tray && lastTrayOpts) setTray(lastTrayOpts); }); // refresh the menu's update item
+  // Refresh the menu's update item and tell the page, which shows the news in Settings and on screen.
+  updater.start((st) => { if (tray && lastTrayOpts) setTray(lastTrayOpts); win?.webContents.send('om:update', st); });
 });
 // Opening the app again while it runs (it has no Dock icon) brings up Settings rather than doing nothing.
 function reopen() {

@@ -2,87 +2,15 @@
 // Run from desktop/:  npm test      (on Linux CI: xvfb-run -a npm test)
 // Global shortcuts and menu bar clicks are delivered the same way macOS delivers them (main → page),
 // because synthetic key presses can't reach a system-wide hotkey.
-const path = require('path');
+const H = require('./lib/harness');
 const fs = require('fs');
-const os = require('os');
-const { createRequire } = require('module');
-const req = createRequire(path.join(__dirname, '..', 'desktop', 'package.json'));
-const { _electron } = req('playwright-core');
-const electronPath = req('electron');
-const MAIN = path.join(__dirname, '..', 'desktop'); // the app folder, so the app reports its own version
-const HOME = fs.mkdtempSync(path.join(os.tmpdir(), 'overmark-e2e-'));
-const SHOTS = process.env.SHOTS || '';
-
-const results = [];
+const { state, sleep, assert, step, waitFor, fake, release, page, waitMode, winState, send, shortcut, menuClick, menuLabels, upd, drag, toolbarShown, shot } = H;
+const inkPixels = (id = 'ink') => H.pixels(id);
+const requests = state.requests;
 let app;
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-async function step(name, fn) {
-  const t = Date.now();
-  try { const note = await fn(); results.push(['PASS', name, note || '']); console.log(`PASS  ${name}${note ? '  (' + note + ')' : ''}  ${Date.now() - t}ms`); }
-  catch (e) { results.push(['FAIL', name, e.message]); console.log(`FAIL  ${name}: ${e.message}`); }
-}
-const assert = (c, m) => { if (!c) throw new Error(m); };
-async function waitFor(fn, what, ms = 15000) {
-  const end = Date.now() + ms; let last;
-  while (Date.now() < end) { try { last = await fn(); if (last) return last; } catch (e) { last = e.message; } await sleep(150); }
-  throw new Error(`timed out waiting for ${what} (last: ${JSON.stringify(last)})`);
-}
-
-async function launch() {
-  const args = [MAIN];
-  if (process.platform === 'linux') args.unshift('--no-sandbox'); // CI containers and Ubuntu's AppArmor block Chromium's sandbox; macOS keeps it
-  app = await _electron.launch({ executablePath: electronPath, args, env: { ...process.env, HOME, XDG_CONFIG_HOME: path.join(HOME, '.config'), OVERMARK_TEST: '1', OVERMARK_NO_UPDATE_CHECK: '1', OVERMARK_UPDATE_URL: fake.url + '/releases' } });
-  app.on('window', (p) => p.on('request', (r) => { if (/^https?:/.test(r.url())) requests.push(r.url()); }));
-}
-const requests = [];
-// A local stand-in for GitHub Releases, serving a real zip and SHA256SUMS.txt.
-const http = require('http'), crypto = require('crypto');
-const fake = { releases: [], files: {}, url: '' };
-const server = http.createServer((q, r) => {
-  if (q.url === '/releases') { r.setHeader('content-type', 'application/json'); return r.end(JSON.stringify(fake.releases)); }
-  const f = fake.files[q.url]; if (!f) { r.statusCode = 404; return r.end(); }
-  r.end(f);
-});
-function release(tag, { pre = false, tamper = false } = {}) {
-  const arch = process.arch === 'arm64' ? 'arm64' : 'x64', v = tag.replace(/^v/, ''), name = `Overmark-${v}-${arch}-mac.zip`;
-  const body = Buffer.from('PK fake zip for ' + tag + ' ' + 'x'.repeat(5000));
-  fake.files['/dl/' + tag + '/' + name] = body;
-  const sum = tamper ? '0'.repeat(64) : crypto.createHash('sha256').update(body).digest('hex');
-  fake.files['/dl/' + tag + '/SHA256SUMS.txt'] = `${sum}  ${name}\n${'1'.repeat(64)}  Overmark-${v}-${arch}.dmg\n`;
-  return { tag_name: tag, prerelease: pre, draft: false, html_url: 'https://github.com/thepiyushway/overmark/releases/tag/' + tag,
-    assets: [{ name, browser_download_url: fake.url + '/dl/' + tag + '/' + name }, { name: 'SHA256SUMS.txt', browser_download_url: fake.url + '/dl/' + tag + '/SHA256SUMS.txt' }] };
-}
-const upd = (fn) => app.evaluate(async ({}, fn) => { const u = global.__overmark.updater; return fn === 'check' ? u.check({ manual: true }) : fn === 'install' ? u.install() : u.getState(); }, fn);
-// The page that belongs to the app's current window (it is rebuilt when switching Settings ⇄ overlay).
-async function page() {
-  const url = await app.evaluate(() => global.__overmark?.win()?.webContents.id);
-  for (const p of app.windows()) {
-    if (p.isClosed()) continue;
-    const id = await app.evaluate(({ BrowserWindow }, u) => BrowserWindow.getAllWindows().find((w) => w.webContents.getURL() === u)?.webContents.id, p.url()).catch(() => null);
-    if (id === url) return p;
-  }
-  return app.windows().filter((p) => !p.isClosed()).at(-1);
-}
-const mode = async () => (await page()).evaluate(() => (document.documentElement.classList.contains('overlay') && document.body.classList.contains('overlay')) || document.documentElement.className.includes('overlay') ? 'overlay' : document.documentElement.className.includes('setup') ? 'setup' : 'page');
-async function waitMode(m) {
-  return waitFor(async () => { const p = await page(); const ok = await p.evaluate((m) => document.documentElement.classList.contains(m) && document.readyState === 'complete', m); return ok && p; }, `mode ${m}`);
-}
-const winState = () => app.evaluate(({ screen }) => { const w = global.__overmark.win(); return { visible: w.isVisible(), focused: w.isFocused(), top: w.isAlwaysOnTop(), bounds: w.getBounds(), work: screen.getPrimaryDisplay().workArea, ignoring: global.__overmark.ignoring() }; });
-const send = (channel, arg) => app.evaluate(({}, [c, a]) => global.__overmark.win().webContents.send(c, a), [channel, arg]);
-const shortcut = (acc) => send('om:shortcut', acc);
-async function menuClick(label) {
-  const ok = await app.evaluate(({}, label) => { const it = global.__overmark.menu().find((i) => i.label && i.label.startsWith(label)); if (!it) return false; setTimeout(() => it.click(it), 0); return true; }, label);
-  assert(ok, `menu item "${label}" not found`);
-}
-const menuLabels = () => app.evaluate(() => global.__overmark.menu().map((i) => i.label).filter(Boolean));
-const inkPixels = async (id = 'ink') => (await page()).evaluate((id) => { const c = document.getElementById(id); const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data; let n = 0; for (let i = 3; i < d.length; i += 4) if (d[i] > 20) n++; return n; }, id);
-const toolbarShown = async () => (await page()).evaluate(() => { const b = document.getElementById('bar'); const r = b.getBoundingClientRect(); return getComputedStyle(b).display !== 'none' && getComputedStyle(b).visibility !== 'hidden' && r.width > 0 && r.top >= 0; });
-const shot = async (name) => { if (SHOTS) await (await page()).screenshot({ path: path.join(SHOTS, name + '.png') }).catch(() => {}); };
-async function drag(p, pts) { await p.mouse.move(...pts[0]); await p.mouse.down(); for (const q of pts.slice(1)) await p.mouse.move(...q, { steps: 6 }); await p.mouse.up(); await sleep(150); }
+const launch = async () => { app = await H.launch(); return app; };
 
 (async () => {
-  if (SHOTS) fs.mkdirSync(SHOTS, { recursive: true });
-  await new Promise((r) => server.listen(0, '127.0.0.1', r)); fake.url = 'http://127.0.0.1:' + server.address().port;
   await launch();
 
   await step('First launch opens the Settings window (not an invisible menu bar app)', async () => {
@@ -216,12 +144,12 @@ async function drag(p, pts) { await p.mouse.move(...pts[0]); await p.mouse.down(
   await step('Zoom (⌘⇧8): lens on a Mac; elsewhere it switches itself off cleanly', async () => {
     const zoomChecked = async () => (await app.evaluate(() => global.__overmark.menu().find((i) => i.label?.startsWith('Zoom'))?.checked));
     await shortcut('Command+Shift+8');
-    if (process.platform === 'darwin') {
+    if (process.platform === 'darwin' || H.captureAvailable()) { // a real or stand-in screencapture: the lens must draw
       await waitFor(zoomChecked, 'zoom on');
       const n = await waitFor(async () => { const n = await inkPixels('fx'); return n > 1000 && n; }, 'lens drawn', 8000);
       await shot('08-zoom');
       await shortcut('Command+Shift+8'); await waitFor(async () => !(await zoomChecked()), 'zoom off');
-      return n + ' px lens';
+      return n + ' px lens' + (process.platform === 'darwin' ? '' : ' (stand-in capture)');
     }
     await waitFor(async () => !(await zoomChecked()), 'zoom switched itself off', 8000);
     const msg = await waitFor(async () => { const m = await (await page()).evaluate(() => document.querySelector('#hud')?.innerText || ''); return /couldn't capture/.test(m) && m; }, 'zoom message', 5000);
@@ -316,9 +244,5 @@ async function drag(p, pts) { await p.mouse.move(...pts[0]); await p.mouse.down(
     await app.evaluate(({ app }) => app.exit(0));
   });
 
-  const failed = results.filter((r) => r[0] === 'FAIL');
-  console.log(`\n${results.length - failed.length}/${results.length} passed`);
-  if (process.env.RESULTS) fs.writeFileSync(process.env.RESULTS, JSON.stringify(results, null, 2));
-  server.close();
-  process.exit(failed.length ? 1 : 0);
+  process.exit(H.finish('Standalone app flow') ? 1 : 0);
 })().catch(async (e) => { console.error('FATAL', e); try { await app?.evaluate(({ app }) => app.exit(1)); } catch {} process.exit(2); });

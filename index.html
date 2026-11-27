@@ -252,7 +252,7 @@ pre.diag{white-space:pre-wrap;overflow-wrap:anywhere;background:var(--bg);border
       <dl class="grid2" id="drawKeys"></dl>
     </div>
   </section>
-  <footer>Built by <a href="https://github.com/thepiyushway">thepiyushway</a> with Claude · <a href="https://github.com/thepiyushway/overmark">Source and setup guide</a><br>Overmark reads only your pointer position while a cursor effect is on. Nothing is recorded or sent anywhere. Zoom captures a small area around the pointer on your Mac and keeps nothing.</footer>
+  <footer>Built by <a href="https://github.com/thepiyushway" target="_blank" rel="noopener">thepiyushway</a> with Claude · <a href="https://github.com/thepiyushway/overmark" target="_blank" rel="noopener">Source and setup guide</a><br>Overmark reads only your pointer position while a cursor effect is on. Nothing is recorded or sent anywhere. Zoom captures a small area around the pointer on your Mac and keeps nothing.</footer>
 </div>
 
 <div id="settings">
@@ -290,6 +290,7 @@ const esc = (t) => String(t).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const STANDALONE = !!window.claude?.standalone; // the downloadable Mac app (Electron) rather than the Claude app
+let APP_VERSION = null; // the downloadable app's own version (what updates compare); the page has its own VERSION
 const HOST = STANDALONE ? 'Overmark' : 'Claude'; // the app macOS asks about for Screen Recording
 
 // ============================================================ settings model
@@ -589,7 +590,7 @@ const endStroke = (how) => {
   if (S.mode === 'overlay') track('stroke', { how: typeof how === 'string' ? how : 'next-down', tool: s.tool, pts: s.pts.length });
   if (TWO_POINT.has(s.tool) && s.pts.length < 2) { redraw(); return; }
   s.done = Date.now();
-  S.strokes.push(s); S.redo = [];
+  S.strokes.push(s); S.redo = []; S.cleared = null;
   syncBar(); redraw(); updateVisibility();
 };
 // Finish strokes however the release arrives: in the surface, anywhere in the window, or when capture is lost.
@@ -626,7 +627,7 @@ function commitText() {
   note.hidden = true;
   if (!text) return;
   S.strokes.push({ tool: 'text', text, color: curColor(), g: CFG.gradient.slice(), size: TEXT_SIZES[S.width], pts: [[+note.dataset.x, +note.dataset.y]], done: Date.now() });
-  S.redo = [];
+  S.redo = []; S.cleared = null;
   syncBar(); redraw(); updateVisibility();
 }
 note.addEventListener('input', () => { note.style.height = 'auto'; note.style.height = note.scrollHeight + 'px'; note.style.width = Math.max(220, note.scrollWidth + 12) + 'px'; });
@@ -639,13 +640,20 @@ note.addEventListener('blur', commitText);
 
 // ============================================================ actions
 let seeded = false;
-function undo() { commitText(); const s = S.strokes.pop(); if (s) S.redo.push(s); syncBar(); redraw(); updateVisibility(); }
-function redo() { const s = S.redo.pop(); if (s) { s.done = Date.now(); S.strokes.push(s); } syncBar(); redraw(); updateVisibility(); }
+// Undo also brings back ink removed by Clear, so an accidental clear is one ⌘Z away.
+function undo() {
+  commitText();
+  const s = S.strokes.pop();
+  if (s) S.redo.push(s);
+  else if (S.cleared) { const now = Date.now(); S.strokes = S.cleared; S.cleared = null; S.strokes.forEach((st) => { st.done = now; }); }
+  syncBar(); redraw(); updateVisibility(); setTray();
+}
+function redo() { const s = S.redo.pop(); if (s) { s.done = Date.now(); S.strokes.push(s); } syncBar(); redraw(); updateVisibility(); setTray(); }
 function clearAll() {
   if (seeded) seeded = 'cleared';
   commitText();
-  if (S.strokes.length) { S.redo = S.strokes.reverse(); S.strokes = []; }
-  syncBar(); redraw(); updateVisibility();
+  if (S.strokes.length) { S.cleared = S.strokes; S.strokes = []; S.redo = []; }
+  syncBar(); redraw(); updateVisibility(); setTray();
 }
 function setTool(t) { commitText(); S.tool = t; save('tool', t); syncBar(); }
 function setColor(i) { S.color = i; save('color', i); if (!note.hidden) note.style.color = i === 6 ? CFG.gradient[0] : CFG.palette[i]; syncBar(); }
@@ -663,7 +671,7 @@ function toggleBoard(force) {
   const from = S.board ? 'board' : 'screen', to = on ? 'board' : 'screen';
   S.layers[from] = { strokes: S.strokes, redo: S.redo };
   ({ strokes: S.strokes, redo: S.redo } = S.layers[to]);
-  S.board = on;
+  S.board = on; S.cleared = null;
   if (on && S.mode === 'overlay' && !S.drawing) setDraw(true);
   syncBar(); redraw(); setTray(); updateVisibility();
 }
@@ -719,7 +727,7 @@ function syncBar() {
   const set = (a, v) => { const b = bar.querySelector(`[data-act=${a}]`); if (b) b.setAttribute('aria-pressed', !!v); };
   set('erase', CFG.autoErase); set('board', S.board); set('hl', S.hl); set('spot', S.spot); set('zoom', S.zoom);
   const z = bar.querySelector('[data-act=zoom]'); if (z) z.hidden = S.mode !== 'overlay';
-  bar.querySelector('[data-act=undo]').disabled = !S.strokes.length;
+  bar.querySelector('[data-act=undo]').disabled = !S.strokes.length && !S.cleared;
   bar.querySelector('[data-act=redo]').disabled = !S.redo.length;
   bar.querySelector('[data-act=clear]').disabled = !S.strokes.length;
 }
@@ -863,6 +871,7 @@ document.addEventListener('keydown', (e) => {
   if (!key) return;
   if (mods.length < 2) { keyMsg('Use two modifier keys plus a letter or number, for example ⌘ Command + ⇧ Shift + 1.', true); return; }
   if (['Command+Shift+3', 'Command+Shift+4', 'Command+Shift+5'].includes(acc)) { keyMsg('macOS uses that for screenshots. Pick another.', true); return; }
+  if (mods.includes('Control') && mods.includes('Alt')) { keyMsg('macOS reserves Control + Option combinations for VoiceOver. Pick another.', true); return; }
   const clash = Object.entries(KEYS).find(([id, v]) => v === acc && id !== recording);
   if (clash) { keyMsg(`That's already used for ${ACTIONS[clash[0]].label}.`, true); return; }
   KEYS[recording] = acc; save('keys2', KEYS); recording = null;
@@ -1076,6 +1085,27 @@ function setTray() {
     ],
   }).catch((e) => logErr('tray', e));
 }
+// Standalone app: a new release was found. Settings shows a banner with an Install button;
+// on screen, a short notice appears once per version.
+let updateShown = null;
+function pendingUpdateNotice(delay) {
+  if (!STANDALONE || !D?.app?.updateState) return;
+  setTimeout(() => D.app.updateState().then(showUpdate).catch(() => {}), delay);
+}
+function showUpdate(st) {
+  if (!st || st.status !== 'available' || !st.latest) return;
+  const v = st.latest.version;
+  if (S.mode === 'setup') {
+    say(`Update available: Overmark ${v}.`);
+    let ub = document.getElementById('updBtn');
+    if (!ub) { ub = document.createElement('button'); ub.id = 'updBtn'; ub.type = 'button'; ub.className = 'btn primary'; ub.style.cssText = 'display:block;margin:8px auto 0'; status2.after(ub); }
+    ub.textContent = `Install update (${v})`; ub.hidden = false;
+    ub.onclick = async () => { ub.disabled = true; say(`Installing Overmark ${v}… it will reopen by itself.`); const r = await D.app.installUpdate().catch((e) => ({ error: e.message })); if (r?.error) { ub.disabled = false; say('Update failed: ' + r.error); } };
+  } else if (S.mode === 'overlay' && updateShown !== v && load('updateNotified', '') !== v) {
+    updateShown = v; save('updateNotified', v);
+    hud(`Overmark ${esc(v)} is available. Click the menu bar icon → Install update.`, 6000);
+  }
+}
 function welcomeKeys() {
   const parts = [['annotate', 'draw'], ['highlight', 'highlight'], ['spotlight', 'spotlight'], ['zoom', 'zoom'], ['clear', 'clear']]
     .filter(([id]) => KEYS[id]).map(([id, l]) => `<kbd>${short(KEYS[id])}</kbd> ${l}`);
@@ -1125,6 +1155,7 @@ async function startOverlay({ draw = false, bare = false } = {}) {
 async function enterOverlay() {
   track('enterOverlay');
   S.mode = 'overlay';
+  pendingUpdateNotice(CFG.tips ? 7000 : 600); // after the welcome tip, so neither hides the other
   if (S.tool === 'text') S.tool = 'pen';
   save('lastMode', 'overlay');
   root.classList.remove('setup'); root.classList.add('overlay');
@@ -1239,9 +1270,9 @@ function paneHTML() {
     <h2>While drawing</h2><div class="group" style="padding:12px 16px"><dl class="grid2">${DRAW_KEYS.map(([ks, d]) => `<dt>${keyCaps(ks)}</dt><dd>${d}</dd>`).join('')}</dl></div>`;
   return `<div class="about"><canvas id="aboutMark" width="176" height="176"></canvas><h3>Overmark</h3>
     <p>Draw on your screen, highlight and spotlight your cursor, and zoom, in any app.</p>
-    <p>Built by <a href="https://github.com/thepiyushway">thepiyushway</a> with Claude${STANDALONE ? '. Standalone Mac edition' : ', and installed from Claude as a Mac app'}. No account, no subscription, nothing leaves your Mac.</p>
-    <p><a href= + REPO + >Source code and setup guide on GitHub</a></p>
-    <p style="font-size:13px">Version ${VERSION}</p>
+    <p>Built by <a href="https://github.com/thepiyushway" target="_blank" rel="noopener">thepiyushway</a> with Claude${STANDALONE ? '. Standalone Mac edition' : ', and installed from Claude as a Mac app'}. No account, no subscription, nothing leaves your Mac.</p>
+    <p><a href="https://github.com/thepiyushway/overmark" target="_blank" rel="noopener">Source code and setup guide on GitHub</a></p>
+    <p style="font-size:13px">Version ${esc(APP_VERSION || VERSION)}</p>
     <p style="font-size:13px">${STANDALONE ? 'Updates: Overmark checks GitHub twice a day and tells you when a new version is ready. Install it from the menu bar icon → Install update.' : 'Updates arrive automatically. Each new version asks for its permissions again.'} Saved settings: ${esc(Object.keys(load('cfg', {})).length ? 'customised' : 'defaults')}.</p>
     <p>${STANDALONE ? '<button class="btn" type="button" data-do="updates">Check for updates</button>' : '<button class="btn" type="button" data-do="reload">Reload to latest version</button>'} <button class="btn" type="button" data-do="resetall">Reset all settings</button></p></div>`;
 }
@@ -1320,7 +1351,7 @@ document.addEventListener('click', async (e) => {
   const b = e.target.closest('[data-do]'); if (!b) return;
   const act = b.dataset.do;
   if (act === 'perms') D?.permissions.manage().then(refreshPerms).catch(() => {});
-  if (act === 'copydiag') navigator.clipboard.writeText($('#diagText').textContent).then(() => say('Diagnostics copied.'), () => say('Copy failed.'));
+  if (act === 'copydiag') { const t = $('#diagText').textContent; (D?.clipboard?.writeText ? D.clipboard.writeText(t) : navigator.clipboard.writeText(t)).then(() => say('Diagnostics copied.'), () => say('Copy failed.')); }
   if (act === 'reload') { track('reload'); await flush(); location.reload(); return; }
   if (act === 'updates') {
     say('Checking for updates…');
@@ -1406,7 +1437,11 @@ async function boot() {
   const { applied = {} } = await D.window.getOptions().catch(() => ({}));
   const isOverlayWindow = applied.transparent === true && applied.frame === false;
   track('boot', { perms: PERMS, applied, setupFlag: load('setup', STANDALONE), isOverlayWindow, ua: navigator.userAgent.slice(-60) });
-  if (STANDALONE) D.app.onReopen?.(() => openSetup());
+  if (STANDALONE) {
+    APP_VERSION = await D.app.getVersion?.().catch(() => null);
+    D.app.onReopen?.(() => openSetup());
+    D.app.onUpdate?.(showUpdate);
+  }
   // The standalone app has every permission from the start: show Settings on first launch instead of disappearing into the menu bar.
   if (PERMS.overlay === 'granted' && !load('setup', STANDALONE)) {
     if (isOverlayWindow) { settled(); return enterOverlay(); }
@@ -1420,6 +1455,7 @@ async function boot() {
   track('settingsWindow');
   // Settings window
   S.mode = 'setup';
+  pendingUpdateNotice(0);
   save('lastMode', 'setup');
   root.classList.remove('overlay'); root.classList.add('setup');
   if (PERMS.overlay === 'granted') wireSystem();

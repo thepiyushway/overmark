@@ -64,7 +64,7 @@ On a Mac with Node 18+:
 git clone https://github.com/thepiyushway/overmark.git
 cd overmark/desktop
 npm install
-npm test            # 33-step end-to-end test of the app
+npm test            # end-to-end tests of the app (user flow + every feature)
 npm run dist        # → desktop/dist/Overmark-<version>-arm64.dmg and -x64.dmg
 ```
 With no Developer ID, builds are ad-hoc signed. The first time, open the app with right-click → **Open**, or go to System Settings → Privacy & Security → **Open Anyway**. To ship notarized builds, set `CSC_LINK`/`CSC_KEY_PASSWORD` and `APPLE_ID`/`APPLE_APP_SPECIFIC_PASSWORD`/`APPLE_TEAM_ID`; electron-builder then signs and notarizes.
@@ -79,7 +79,7 @@ One file, `index.html`, holds the whole app: the drawing engine, the overlay, se
 - **As a Claude app**, Claude's desktop app provides that API: transparent always-on-top windows, global shortcuts, a menu bar item, and child processes for zoom.
 - **As the standalone app**, [`desktop/preload.js`](desktop/preload.js) and [`desktop/main.js`](desktop/main.js) provide the same API with Electron.
 
-Design notes and the bugs found along the way are in **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**. Every release must pass a 33-step end-to-end test of the real app and a web smoke test: results in **[docs/TESTING.md](docs/TESTING.md)**.
+Design notes and the bugs found along the way are in **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**. Every push runs 102 automated end-to-end checks against the real app: a 33-step user flow and a 69-step test of every feature. A web smoke test runs too. Results are in **[docs/TESTING.md](docs/TESTING.md)**. `main` is where work happens; pushing to `release` ships an update to everyone: see **[docs/RELEASING.md](docs/RELEASING.md)**.
 
 ## Privacy
 Overmark never reads what you type in other apps and sends nothing anywhere. It reads your pointer position only while a cursor effect is on. Zoom captures a small square around the pointer to a temporary file and shows it, then overwrites it. The Claude-app build writes a small diagnostics log (state and events, no content) to a private per-person record in its artifact database.
