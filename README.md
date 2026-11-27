@@ -1,7 +1,7 @@
 <p align="center"><img src="desktop/build/icon.png" width="112" alt="Overmark icon"></p>
 <h1 align="center">Overmark</h1>
 <p align="center"><b>Draw on anything on your screen.</b><br>
-Annotate, erase, highlight and spotlight your cursor, zoom and take screenshots, over any app on your Mac.<br>
+Annotate, move, erase, highlight and spotlight your cursor, zoom and take screenshots, over any app on your Mac.<br>
 Free and open source. Built with Claude by <a href="https://github.com/thepiyushway">@thepiyushway</a>.</p>
 
 <p align="center">
@@ -30,6 +30,7 @@ Overmark updates itself. When a new version is out, you'll see it in a notificat
 ### Draw, erase, write
 | | |
 |---|---|
+| <img src="docs/screenshots/overlay-select.png" alt="An arrow selected with a dashed box and moved to a new place"> | **Select and move (V):** click any arrow, box, circle, text or stroke and drag it somewhere else. Arrow keys nudge it, and Delete removes just that mark. Everything you do can be undone, step by step. |
 | <img src="docs/screenshots/overlay-eraser.png" alt="The eraser rubbing out part of a line, with its size ring"> | **Pen, highlighter, eraser, line, arrow, box, circle and text.** Hold Shift for straight 45° lines and perfect squares and circles.<br><br>**Eraser (E):** rub out just part of your ink in three sizes. A ring shows what it will remove.<br><br>Undo and redo with ⌘Z and ⇧⌘Z. Undo even brings back ink you cleared by mistake.<br><br>**Each tool keeps its own size**, and a stylus draws thicker when you press harder. |
 | <img src="docs/screenshots/overlay-picker.png" alt="The colour picker with 24 quick colours"> | **Colours:** red, yellow, blue and green on the toolbar, plus a **colour picker** with 24 quick colours. Any shade, gradient ink, orange and white are available from Settings and by key.<br><br>**Auto-erase (F)** fades ink after 1–15 seconds, so you can keep presenting. **Screenshot (C)** saves the screen with your ink to the Desktop and copies it. |
 
@@ -62,7 +63,7 @@ Overmark updates itself. When a new version is out, you'll see it in a notificat
 | (set your own) | Whiteboard, auto-erase, screenshot |
 
 **While drawing:**
-- **P M E** pen, highlighter, eraser · **L A R O T** line, arrow, box, circle, text
+- **V** select and move (arrows nudge, Delete removes) · **P M E** pen, highlighter, eraser · **L A R O T** line, arrow, box, circle, text
 - **1–8** colours (5 orange, 6 white, 7 gradient, 8 custom) · **− =** smaller or bigger
 - **⌘Z / ⇧⌘Z** undo and redo · **F** auto-erase · **B** whiteboard · **C** screenshot · **H S Z** highlight, spotlight, zoom · **X** clear
 - **/** shows every key · **Esc** finishes and hands the mouse back to your app
@@ -74,7 +75,7 @@ Overmark updates itself. When a new version is out, you'll see it in a notificat
 | Install | DMG from [Releases](https://github.com/thepiyushway/overmark/releases) | Open the Overmark artifact in Claude → **Install as Mac app** |
 | Needs | macOS 12+. Works offline, no account | Claude desktop app, signed in |
 | Updates | Built-in updater, with checksum and signature checks | Automatic when the artifact is republished |
-| Zoom and screenshots | Allow **Overmark** under Screen Recording | Allow **Claude** under Screen Recording |
+| Zoom and screenshots | Allow **Overmark** under Screen Recording | Allow **Overmark** and **Claude** under Screen Recording |
 
 ## Build it yourself
 ```bash
@@ -87,7 +88,7 @@ npm run dist      # → desktop/dist/Overmark-<version>-arm64.dmg and -x64.dmg
 ```
 
 ## Quality
-Every push runs **127 automated end-to-end checks against the real app**: a 33-step user flow and a 94-step test of every feature. A web smoke test runs too. Releases are built and checked on macOS before they're published. Results, and the bugs the tests caught, are in **[docs/TESTING.md](docs/TESTING.md)**.
+Every push runs **138 automated end-to-end checks against the real app**: a 33-step user flow and a 105-step test of every feature. A web smoke test runs too. Releases are built and checked on macOS before they're published. Results, and the bugs the tests caught, are in **[docs/TESTING.md](docs/TESTING.md)**.
 
 `main` is where work happens; pushing to `release` ships an update to everyone ([docs/RELEASING.md](docs/RELEASING.md)). Signing and notarization are ready to switch on ([docs/SIGNING.md](docs/SIGNING.md)). Design notes are in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 

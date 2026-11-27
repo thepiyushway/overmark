@@ -351,8 +351,8 @@ async function penStroke(p, y, pressure) {
   section('Drawing tools and toolbar');
   await step('Every tool button selects its tool', async () => {
     await toOverlay(); const p = await startDraw();
-    for (const t of ['pen', 'marker', 'eraser', 'line', 'arrow', 'rect', 'ellipse', 'text', 'pen']) { await p.click(`[data-tool="${t}"]`); assert(await p.$eval(`[data-tool="${t}"]`, (b) => b.getAttribute('aria-pressed')) === 'true', t); }
-    return '8 tools';
+    for (const t of ['select', 'pen', 'marker', 'eraser', 'line', 'arrow', 'rect', 'ellipse', 'text', 'pen']) { await p.click(`[data-tool="${t}"]`); assert(await p.$eval(`[data-tool="${t}"]`, (b) => b.getAttribute('aria-pressed')) === 'true', t); }
+    return '9 tools';
   });
   await step('Colour keys 1–6 draw in the palette colours', async () => {
     const p = await page(); const got = [];
@@ -406,9 +406,10 @@ async function penStroke(p, y, pressure) {
     await drag(p, [[300, 300], [600, 300]]); await drag(p, [[300, 400], [600, 400]]); const n = await pixels();
     await p.keyboard.press('x'); await sleep(120); assert((await pixels()) === 0 && !(await dis('undo')), 'undo not offered after clear');
     await p.keyboard.press('Control+z'); await sleep(150); assert((await pixels()) === n, `restored ${await pixels()} of ${n}`);
-    await p.keyboard.press('x'); await drag(p, [[300, 600], [500, 600]]); await p.keyboard.press('Control+z'); await p.keyboard.press('Control+z'); await sleep(150);
-    assert((await pixels()) === 0, 'a new stroke after clearing should end the chance to restore');
-    await clearInk(); return 'both strokes restored with ⌘Z';
+    await p.keyboard.press('x'); await drag(p, [[300, 600], [500, 600]]); await p.keyboard.press('Control+z'); await sleep(120);
+    assert((await pixels()) === 0, 'first undo should remove the new stroke'); await p.keyboard.press('Control+z'); await sleep(150);
+    assert((await pixels()) === n, 'second undo should bring the cleared ink back');
+    await clearInk(); return 'cleared ink restored with ⌘Z, even after drawing again';
   });
   await step('Backspace clears; F toggles auto-erase (fading ink)', async () => {
     const p = await page(); await drag(p, [[300, 300], [600, 300]]); await p.keyboard.press('Backspace'); await sleep(120); assert((await pixels()) === 0, 'backspace');
@@ -510,6 +511,92 @@ async function penStroke(p, y, pressure) {
     for (let i = 0; i < 8; i++) { assert((await pixelAt('ink', 600, 300))[3] < 40, `erased gap reappeared after ${i * 0.4}s`); await sleep(400); }
     await waitFor(async () => (await pixels()) === 0, 'everything faded', 6000);
     await stopDraw(); await toSettings('annotate'); await setControl('autoErase', false); await setControl('eraseAfter', 3);
+  });
+
+  // ==================================================================== Select and move
+  section('Select and move');
+  const markBox = async (region) => inkBox('ink', region);
+  await step('V selects the Select tool; clicking a mark selects it and draws a box around it', async () => {
+    const p = await startDraw(); await clearInk(); await p.keyboard.press('p'); await p.keyboard.press('1'); await p.click('[data-width="1"]');
+    await drag(p, [[300, 300], [600, 300]]); await p.keyboard.press('v');
+    assert(await p.$eval('[data-tool="select"]', (b) => b.getAttribute('aria-pressed')) === 'true', 'V did not select the tool');
+    await p.mouse.click(450, 301); const box = await waitFor(async () => { const b = await inkBox('fx'); return b.n > 100 && b; }, 'selection box');
+    assert(box.x < 300 && box.x + box.w > 600 && box.y < 300 && box.y + box.h > 300, 'box does not surround the line: ' + JSON.stringify(box));
+    return `box ${Math.round(box.w)}×${Math.round(box.h)} px`;
+  });
+  await step('Dragging moves the mark: an arrow from one place to another', async () => {
+    const p = await page(); await clearInk(); await p.keyboard.press('a'); await drag(p, [[300, 300], [500, 300]]);
+    const before = await markBox(); await p.keyboard.press('v');
+    await drag(p, [[400, 300], [400, 420], [480, 550]]);
+    const after = await markBox(); assert(Math.abs(after.x - before.x - 80) < 3 && Math.abs(after.y - before.y - 250) < 3, `moved ${after.x - before.x}, ${after.y - before.y}`);
+    assert((await inkBox('ink', [280, 270, 260, 60])).n === 0, 'ink left behind');
+    return `moved by ${Math.round(after.x - before.x)}, ${Math.round(after.y - before.y)}`;
+  });
+  await step('Undo puts it back; redo moves it again', async () => {
+    const p = await page(); const moved = await markBox();
+    await p.keyboard.press('Control+z'); await sleep(120); const back = await markBox(); assert(Math.abs(moved.y - back.y - 250) < 3, 'undo ' + (moved.y - back.y));
+    await p.keyboard.press('Control+Shift+z'); await sleep(120); const again = await markBox(); assert(Math.abs(again.y - moved.y) < 1, 'redo');
+  });
+  await step('Arrow keys nudge the selection: 1 px, or 10 px with Shift', async () => {
+    const p = await page(); const b0 = await markBox(); await p.mouse.click(b0.x + b0.w / 2, b0.y + b0.h / 2 + 1);
+    for (let i = 0; i < 3; i++) await p.keyboard.press('ArrowRight');
+    await p.keyboard.press('Shift+ArrowDown'); await sleep(120); const b1 = await markBox();
+    assert(Math.round(b1.x - b0.x) === 3 && Math.round(b1.y - b0.y) === 10, `nudged ${b1.x - b0.x}, ${b1.y - b0.y}`);
+    await p.keyboard.press('Control+z'); await sleep(100); const b2 = await markBox(); assert(Math.round(b1.y - b2.y) === 10, 'undo nudge');
+  });
+  await step('Delete removes only the selected mark; undo brings it back', async () => {
+    const p = await page(); await clearInk(); await p.keyboard.press('p'); await drag(p, [[300, 300], [600, 300]]); await drag(p, [[300, 500], [600, 500]]);
+    const both = await pixels(); await p.keyboard.press('v'); await p.mouse.click(450, 300); await p.keyboard.press('Delete'); await sleep(120);
+    assert((await inkBox('ink', [280, 280, 340, 40])).n === 0 && (await inkBox('ink', [280, 480, 340, 40])).n > 0, 'wrong mark deleted');
+    assert((await pixels()) > 0, 'Delete cleared everything');
+    await p.keyboard.press('Control+z'); await sleep(120); assert((await pixels()) === both, 'undo did not restore it');
+  });
+  await step('Esc deselects first, then stops drawing; clicking empty space deselects', async () => {
+    const p = await page(); await p.mouse.click(450, 300); await waitFor(async () => (await inkBox('fx')).n > 100, 'selected');
+    await p.mouse.click(1000, 700); await waitFor(async () => (await inkBox('fx')).n === 0, 'empty click deselects');
+    await p.mouse.click(450, 300); await waitFor(async () => (await inkBox('fx')).n > 100, 'selected again');
+    await p.keyboard.press('Escape'); await waitFor(async () => (await inkBox('fx')).n === 0, 'Esc deselects'); assert(await hasClass('drawing'), 'Esc should only deselect');
+    await p.keyboard.press('Escape'); await waitFor(async () => !(await hasClass('drawing')), 'second Esc stops drawing');
+  });
+  await step('Text, boxes, circles and highlighter strokes move too', async () => {
+    const p = await startDraw(); await clearInk();
+    // Four marks in a row along the top; each is dragged straight down into empty space.
+    await p.keyboard.press('t'); await p.mouse.click(150, 240); await p.keyboard.type('Move me'); await p.keyboard.press('Enter'); await sleep(150);
+    await p.keyboard.press('r'); await drag(p, [[450, 200], [620, 300]]); await p.keyboard.press('o'); await drag(p, [[740, 200], [880, 300]]);
+    await p.keyboard.press('m'); await drag(p, [[1000, 250], [1250, 250]]); await p.keyboard.press('v');
+    const cases = [['text', [180, 262], [130, 220, 200, 80]], ['box', [535, 250], [430, 180, 210, 140]], ['circle', [810, 250], [720, 180, 180, 140]], ['highlighter', [1120, 250], [980, 220, 290, 60]]];
+    for (const [name, at, region] of cases) {
+      const before = await inkBox('ink', region); await drag(p, [at, [at[0], at[1] + 380]]);
+      const left = await inkBox('ink', region), arrived = await inkBox('ink', [region[0], region[1] + 380, region[2], region[3]]);
+      assert(left.n < before.n * 0.2 && arrived.n > before.n * 0.8, `${name}: left ${left.n}/${before.n}, arrived ${arrived.n}`);
+    }
+    await clearInk(); return cases.map((c) => c[0]).join(', ') + ' moved';
+  });
+  await step('Erased gaps travel with the mark they cut', async () => {
+    const p = await page(); await p.keyboard.press('p'); await drag(p, [[300, 300], [900, 300]]);
+    await p.keyboard.press('e'); await p.click('[data-width="1"]'); await drag(p, [[600, 220], [600, 380]]);
+    await p.keyboard.press('v'); await drag(p, [[350, 300], [350, 500]]);
+    assert((await pixelAt('ink', 600, 500))[3] < 40 && (await pixelAt('ink', 400, 500))[3] > 200, 'gap did not move with the line');
+    assert((await pixels('ink')) > 0 && (await inkBox('ink', [280, 280, 640, 40])).n === 0, 'something left at the old place');
+    await clearInk();
+  });
+  await step('Where marks overlap, the one on top is picked', async () => {
+    const p = await page(); await p.keyboard.press('p'); await p.keyboard.press('1'); await drag(p, [[300, 400], [700, 400]]);
+    await p.keyboard.press('3'); await drag(p, [[500, 250], [500, 550]]); await p.keyboard.press('v');
+    await drag(p, [[500, 400], [800, 400]]);
+    const red = await inkBox('ink', [280, 380, 440, 40]); assert(red.n > 0 && near(red.color, [255, 59, 48], 50), 'the red line moved: ' + red.color);
+    assert((await inkBox('ink', [780, 230, 40, 340])).n > 0, 'the blue line (on top) did not move'); await clearInk();
+  });
+  await step('Switching to another tool clears the selection', async () => {
+    const p = await page(); await p.keyboard.press('p'); await drag(p, [[300, 300], [600, 300]]); await p.keyboard.press('v');
+    await p.mouse.click(450, 300); await waitFor(async () => (await inkBox('fx')).n > 100, 'selected');
+    await p.keyboard.press('p'); await waitFor(async () => (await inkBox('fx')).n === 0, 'selection cleared'); await clearInk();
+  });
+  await step('Hovering a mark with the Select tool shows the move cursor', async () => {
+    const p = await page(); await drag(p, [[300, 300], [600, 300]]); await p.keyboard.press('v');
+    await p.mouse.move(450, 280); await p.mouse.move(450, 300, { steps: 2 }); const on = await p.$eval('#surface', (e) => e.style.cursor);
+    await p.mouse.move(1000, 700, { steps: 2 }); const off = await p.$eval('#surface', (e) => e.style.cursor);
+    assert(on === 'move' && off !== 'move', `cursor on ${on}, off ${off}`); await p.keyboard.press('p'); await clearInk(); await stopDraw();
   });
 
   // ==================================================================== Sizes, colours and pressure
@@ -615,7 +702,7 @@ async function penStroke(p, y, pressure) {
   });
   await step('Settings → Toolbar lists every item with a switch, and a live preview', async () => {
     const p = await toSettings('toolbar'); const n = (await p.$$('[data-bar]')).length;
-    assert(n === 29, n + ' switches'); assert(await p.$('#barPreview [data-tool="pen"]'), 'no preview');
+    assert(n === 30, n + ' switches'); assert(await p.$('#barPreview [data-tool="pen"]'), 'no preview');
     assert(await p.$eval('[data-bar="color:6"]', (e) => !e.checked) && await p.$eval('[data-bar="tool:eraser"]', (e) => e.checked), 'default states');
     return n + ' items: tools, colours, sizes, edit, modes and effects';
   });

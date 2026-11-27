@@ -5,7 +5,7 @@ Every push to `main` and every pull request runs all of this (`.github/workflows
 | Suite | What it drives | Steps |
 |---|---|---|
 | `tests/standalone_e2e.js`: user flow | The real downloadable app (Electron + `desktop/main.js` + `desktop/preload.js` + the bundled page), from a fresh install to quitting and relaunching, including updates | 33 |
-| `tests/features_e2e.js`: every feature | Every setting, drawing tool (eraser included), toolbar button and toolbar customisation, colour picker, stylus pressure, screenshot (including macOS refusing it), shortcut-editor rule, menu bar item and update notice, each checked by what it does on screen | 94 |
+| `tests/features_e2e.js`: every feature | Every setting, drawing tool (eraser and select-and-move included), toolbar button and toolbar customisation, colour picker, stylus pressure, screenshot (including macOS refusing it), shortcut-editor rule, menu bar item and update notice, each checked by what it does on screen | 105 |
 | `tests/smoke_test.py`: web page | `index.html` in Chromium against a mock of the Claude desktop API (the Claude-app edition) | 1 run, many checks |
 | CI build checks (macOS) | The packaged apps: signature, menu-bar-only, version, launches and keeps running, DMG integrity | per release |
 
@@ -33,10 +33,10 @@ xvfb-run -a -s "-screen 0 1440x900x24" npm test
 python ../tests/smoke_test.py   # web page
 ```
 
-## Latest results: 33/33 and 94/94
+## Latest results: 33/33 and 105/105
 Linux under Xvfb, with the screencapture stand-in. Both suites ran three times in a row with no failures. The flow suite also passes without the stand-in, where it checks that zoom fails safely instead.
 
-### Every feature (94)
+### Every feature (105)
 | # | Feature | Result |
 |---|---|---|
 | | **Settings · General** | |
@@ -86,10 +86,10 @@ Linux under Xvfb, with the screencapture stand-in. Both suites ran three times i
 | 40 | Reset all to defaults | ✅  |
 | 41 | Menu bar labels show the current shortcuts | ✅ Annotate screen ⌘⇧1 |
 | | **About & reset** | |
-| 42 | About shows the app version and a working GitHub link | ✅ Version 1.0.0-beta.2 |
+| 42 | About shows the app version and a working GitHub link | ✅ Version 1.0.0-beta.3 |
 | 43 | Reset all settings restores every default | ✅  |
 | | **Drawing tools and toolbar** | |
-| 44 | Every tool button selects its tool | ✅ 8 tools |
+| 44 | Every tool button selects its tool | ✅ 9 tools |
 | 45 | Colour keys 1–6 draw in the palette colours | ✅ 6 colours match |
 | 46 | Thin, medium and thick buttons, and the − = keys, change thickness | ✅ 4 < 7 < 12 px |
 | 47 | Pen ink is solid; highlighter ink is see-through | ✅ alpha 255 vs 97 |
@@ -98,7 +98,7 @@ Linux under Xvfb, with the screencapture stand-in. Both suites ran three times i
 | 50 | Arrow tool draws a line with a head | ✅ head makes it 22 px tall vs 7 px |
 | 51 | Text: Enter places it, Esc cancels it | ✅  |
 | 52 | Undo, redo and clear buttons, enabled only when they can act | ✅  |
-| 53 | Undo brings back ink removed by Clear | ✅ both strokes restored with ⌘Z |
+| 53 | Undo brings back ink removed by Clear | ✅ cleared ink restored with ⌘Z, even after drawing again |
 | 54 | Backspace clears; F toggles auto-erase (fading ink) | ✅  |
 | 55 | Toolbar buttons: highlight, spotlight, whiteboard, key sheet, Done | ✅  |
 | 56 | H, S and B keys toggle highlight, spotlight and whiteboard | ✅  |
@@ -113,40 +113,52 @@ Linux under Xvfb, with the screencapture stand-in. Both suites ran three times i
 | 64 | The eraser works on highlighter ink and text too | ✅ 19932 → 16172 px |
 | 65 | The eraser never cuts through the whiteboard | ✅ board intact under the erased gap |
 | 66 | With auto-erase on, erased ink never comes back while the rest fades | ✅  |
+| | **Select and move** | |
+| 67 | V selects the Select tool; clicking a mark selects it and draws a box around it | ✅ box 328×28 px |
+| 68 | Dragging moves the mark: an arrow from one place to another | ✅ moved by 80, 250 |
+| 69 | Undo puts it back; redo moves it again | ✅  |
+| 70 | Arrow keys nudge the selection: 1 px, or 10 px with Shift | ✅  |
+| 71 | Delete removes only the selected mark; undo brings it back | ✅  |
+| 72 | Esc deselects first, then stops drawing; clicking empty space deselects | ✅  |
+| 73 | Text, boxes, circles and highlighter strokes move too | ✅ text, box, circle, highlighter moved |
+| 74 | Erased gaps travel with the mark they cut | ✅  |
+| 75 | Where marks overlap, the one on top is picked | ✅  |
+| 76 | Switching to another tool clears the selection | ✅  |
+| 77 | Hovering a mark with the Select tool shows the move cursor | ✅  |
 | | **Sizes, colours and pressure** | |
-| 67 | Each tool remembers its own size | ✅ pen thick (12 px), highlighter thin, eraser medium |
-| 68 | The 8th swatch opens 24 quick colours; picking one draws in it | ✅ teal from the picker |
-| 69 | Esc and clicking elsewhere close the picker; key 8 picks the custom colour | ✅  |
-| 70 | Settings → Annotate → Custom colour changes the swatch and the ink | ✅  |
-| 71 | Stylus pressure: a harder press draws a thicker line (mouse strokes unaffected) | ✅ light 4 px, hard 11 px, mouse 7 px |
+| 78 | Each tool remembers its own size | ✅ pen thick (12 px), highlighter thin, eraser medium |
+| 79 | The 8th swatch opens 24 quick colours; picking one draws in it | ✅ teal from the picker |
+| 80 | Esc and clicking elsewhere close the picker; key 8 picks the custom colour | ✅  |
+| 81 | Settings → Annotate → Custom colour changes the swatch and the ink | ✅  |
+| 82 | Stylus pressure: a harder press draws a thicker line (mouse strokes unaffected) | ✅ light 4 px, hard 11 px, mouse 7 px |
 | | **Screenshot** | |
-| 72 | The toolbar button saves the screen with ink to the Desktop, hiding the toolbar while it captures | ✅ Overmark 2026-11-27 at 19.16.15.png; "Screenshot saved to Desktop/Overmark 2026-11-27 at 19.16.15.png and copied to the clipboard." |
-| 73 | It is copied to the clipboard | ✅  |
-| 74 | C key and the menu bar item take screenshots too; quick repeats never overwrite each other | ✅  |
-| 75 | Screenshot can have its own global shortcut | ✅  |
-| 76 | If macOS blocks capture, Overmark says what to allow and opens Screen Recording settings (once) | ✅ Screenshots need Screen Recording. Allow Overmark in System Settings → Privacy & Security → Screen Recording, then quit and reopen Overmark. |
-| 77 | The menu item is unavailable in the Settings window | ✅  |
+| 83 | The toolbar button saves the screen with ink to the Desktop, hiding the toolbar while it captures | ✅ Overmark 2026-11-27 at 20.04.32.png; "Screenshot saved to Desktop/Overmark 2026-11-27 at 20.04.32.png and copied to the clipboard." |
+| 84 | It is copied to the clipboard | ✅  |
+| 85 | C key and the menu bar item take screenshots too; quick repeats never overwrite each other | ✅  |
+| 86 | Screenshot can have its own global shortcut | ✅  |
+| 87 | If macOS blocks capture, Overmark says what to allow and opens Screen Recording settings (once) | ✅ Screenshots need Screen Recording. Allow Overmark in System Settings → Privacy & Security → Screen Recording, then quit and reopen Overmark. |
+| 88 | The menu item is unavailable in the Settings window | ✅  |
 | | **Toolbar** | |
-| 78 | Default toolbar: red, yellow, blue and green, plus the colour picker | ✅ red, yellow, blue, green + picker; orange/white/gradient by key |
-| 79 | Settings → Toolbar lists every item with a switch, and a live preview | ✅ 29 items: tools, colours, sizes, edit, modes and effects |
-| 80 | Hiding items removes them from the toolbar and preview; their keys still work | ✅ eraser, zoom and help hidden; E still erases |
-| 81 | Showing a hidden item adds it back (gradient ink) | ✅  |
-| 82 | Separators appear only between groups that still show something | ✅ 4 → 3 separators with Edit hidden |
-| 83 | Reset toolbar to the default | ✅  |
+| 89 | Default toolbar: red, yellow, blue and green, plus the colour picker | ✅ red, yellow, blue, green + picker; orange/white/gradient by key |
+| 90 | Settings → Toolbar lists every item with a switch, and a live preview | ✅ 30 items: tools, colours, sizes, edit, modes and effects |
+| 91 | Hiding items removes them from the toolbar and preview; their keys still work | ✅ eraser, zoom and help hidden; E still erases |
+| 92 | Showing a hidden item adds it back (gradient ink) | ✅  |
+| 93 | Separators appear only between groups that still show something | ✅ 4 → 3 separators with Edit hidden |
+| 94 | Reset toolbar to the default | ✅  |
 | | **Menu bar menu** | |
-| 84 | Annotate screen ↔ Stop annotating follows the state; Interactive mode only while drawing | ✅  |
-| 85 | Clear ink is enabled only when there is ink, and clears it | ✅  |
-| 86 | Annotate without controls | ✅  |
-| 87 | Whiteboard, Highlight, Spotlight and Auto-erase are ticked when on | ✅ 4 toggles |
-| 88 | Zoom is ticked when on and draws the lens | ✅  |
-| 89 | Show shortcuts lists the keys on screen | ✅ ⌘⇧1 draw ⌘⇧2 highlight ⌘⇧7 spotlight ⌘⇧8 zoom ⌘⇧0  |
-| 90 | Open at login | ✅ skipped: login items are a macOS feature |
+| 95 | Annotate screen ↔ Stop annotating follows the state; Interactive mode only while drawing | ✅  |
+| 96 | Clear ink is enabled only when there is ink, and clears it | ✅  |
+| 97 | Annotate without controls | ✅  |
+| 98 | Whiteboard, Highlight, Spotlight and Auto-erase are ticked when on | ✅ 4 toggles |
+| 99 | Zoom is ticked when on and draws the lens | ✅  |
+| 100 | Show shortcuts lists the keys on screen | ✅ ⌘⇧1 draw ⌘⇧2 highlight ⌘⇧7 spotlight ⌘⇧8 zoom ⌘⇧0  |
+| 101 | Open at login | ✅ skipped: login items are a macOS feature |
 | | **Updates, as people see them** | |
-| 91 | A new release shows in Settings with an Install button | ✅ Install update (9.9.0) |
-| 92 | …and once on screen during a presentation | ✅ Overmark 9.9.0 is available. Click the menu bar icon → Install update. |
-| 93 | …and in the menu bar menu | ✅  |
+| 102 | A new release shows in Settings with an Install button | ✅ Install update (9.9.0) |
+| 103 | …and once on screen during a presentation | ✅ Overmark 9.9.0 is available. Click the menu bar icon → Install update. |
+| 104 | …and in the menu bar menu | ✅  |
 | | **Settings survive a restart** | |
-| 94 | Settings, shortcuts, tool and colour are kept after quitting | ✅ palette, highlight shape, ⌘⇧L, arrow tool, colour 3, toolbar |
+| 105 | Settings, shortcuts, tool and colour are kept after quitting | ✅ palette, highlight shape, ⌘⇧L, arrow tool, colour 3, toolbar |
 
 ### User flow (33)
 | # | Step | Result |
@@ -177,7 +189,7 @@ Linux under Xvfb, with the screencapture stand-in. Both suites ran three times i
 | 24 | Opening the app again while it runs shows Settings | ✅  |
 | 25 | Closing the Settings window keeps Overmark running; ⌘⇧1 still works | ✅  |
 | 26 | Settings… from the menu bar | ✅  |
-| 27 | Updates: no newer release → "up to date" | ✅ running 1.0.0-beta.2 |
+| 27 | Updates: no newer release → "up to date" | ✅ running 1.0.0-beta.3 |
 | 28 | Updates: when up to date the menu offers "Check for updates…" | ✅  |
 | 29 | Updates: a newer release is found and offered in the menu | ✅ offers 1.0.0 |
 | 30 | Updates: the download is verified against SHA256SUMS.txt | ✅ checksum OK |

@@ -2,6 +2,13 @@
 
 Each `## <version>` section becomes the notes of that GitHub Release. People see them under "What's new…" when Overmark offers the update.
 
+## 1.0.0-beta.4
+- **Select and move (V):** click any mark to select it (a box with handles appears) and drag it somewhere else, like moving an arrow to point at something new.
+  - Arrow keys nudge it (Shift for 10 px), Delete removes just that mark, and Esc deselects.
+  - Works on pen and highlighter strokes, lines, arrows, boxes, circles and text. Erased gaps move with the mark they cut.
+- **Full undo history:** undo and redo now cover drawing, moving, deleting and clearing, in order. Undo after "clear, then draw again" brings the cleared ink back too.
+- The Screen Recording message in the Claude app now names both apps macOS checks: **Overmark** and **Claude**.
+
 ## 1.0.0-beta.3
 - **A simpler toolbar:** red, yellow, blue and green, plus the colour picker. Orange, white and gradient ink are still on keys 5, 6 and 7.
 - **Customise the toolbar** (Settings → Toolbar): show or hide every tool, colour, size and button, with a live preview. Hidden items still work from the keyboard, and Reset toolbar restores the default.

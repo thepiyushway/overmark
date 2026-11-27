@@ -104,6 +104,7 @@ footer{padding:28px 0 40px;color:var(--mute);font-size:13px}
 #picker button{width:24px;height:24px;border-radius:50%;border:0;padding:0;cursor:pointer;box-shadow:inset 0 0 0 1px rgba(255,255,255,.25)}
 #picker button[aria-pressed=true]{box-shadow:0 0 0 2px rgba(22,22,24,1),0 0 0 4px #fff}
 .erasing #surface,.overlay.drawing.erasing #surface{cursor:none}
+.selecting #surface,.overlay.drawing.selecting #surface{cursor:default}
 .capturing #bar,.capturing #hud,.capturing #cheat,.capturing #picker,.capturing #note{visibility:hidden!important}
 .tb .dot{border-radius:50%;background:currentColor}
 .tb .sep{width:1px;height:20px;background:rgba(255,255,255,.14);margin:0 3px}
@@ -348,6 +349,7 @@ const PICKER_COLORS = ['#ff3b30', '#ff6b22', '#ff9f0a', '#ffd60a', '#d4e157', '#
   '#a2845e', '#8e8e93', '#ffffff', '#000000', '#ff8a80', '#ffd180', '#ccff90', '#a7ffeb', '#80d8ff', '#b388ff', '#f48fb1', '#1c3d5a'];
 const I = (d) => `<svg viewBox="0 0 24 24" aria-hidden="true">${d}</svg>`;
 const TOOLS = [
+  { id: 'select', key: 'v', label: 'Select and move', icon: I('<path d="M6 3l12 9-5.2 1.3 3.2 6.2-2.3 1.1-3.1-6.3L6 18z"/>') },
   { id: 'pen', key: 'p', label: 'Pen', icon: I('<path d="M4 20l4-1L19 8l-3-3L5 16z"/>') },
   { id: 'marker', key: 'm', label: 'Highlighter', icon: I('<path d="M4 20h7M7 16l9-9 3 3-9 9H7z"/>') },
   { id: 'eraser', key: 'e', label: 'Eraser', icon: I('<path d="M15.5 4.5l4 4L10 18H6l-2.5-2.5z"/><path d="M11.5 8.5l4 4M10 21h10"/>') },
@@ -373,13 +375,15 @@ const BAR_GROUPS = () => [
 const S = {
   tool: load('tool', 'pen'), color: load('color', 0),
   // Each tool remembers its own size (index into WIDTHS / ERASER_SIZES / TEXT_SIZES).
-  widths: { ...Object.fromEntries(['pen', 'marker', 'eraser', 'line', 'arrow', 'rect', 'ellipse', 'text'].map((t) => [t, load('width', 1)])), ...load('widths', {}) },
-  mode: 'page', drawing: false, strokes: [], redo: [], current: null,
+  widths: { ...Object.fromEntries(['select', 'pen', 'marker', 'eraser', 'line', 'arrow', 'rect', 'ellipse', 'text'].map((t) => [t, load('width', 1)])), ...load('widths', {}) },
+  mode: 'page', drawing: false, strokes: [], current: null,
+  // Undo history: add, move, delete and clear operations; the future stack is for redo.
+  history: [], future: [], sel: null, selDrag: null,
   cursor: null, lastMove: 0, hl: false, spot: false, zoom: false, board: false,
-  layers: { screen: { strokes: [], redo: [] }, board: { strokes: [], redo: [] } },
+  layers: { screen: { strokes: [], history: [], future: [] }, board: { strokes: [], history: [], future: [] } },
 };
 if (S.color > 7) S.color = 0;
-if (!['pen', 'marker', 'eraser', 'line', 'arrow', 'rect', 'ellipse', 'text'].includes(S.tool)) S.tool = 'pen';
+if (!['select', 'pen', 'marker', 'eraser', 'line', 'arrow', 'rect', 'ellipse', 'text'].includes(S.tool)) S.tool = 'pen';
 const toolWidth = () => clamp(S.widths[S.tool] ?? 1, 0, 2);
 
 // ============================================================ canvas sizing
@@ -588,9 +592,17 @@ function renderInk() {
   if (S.current) drawStroke(lctx, S.current, 1);
   ctx.drawImage(layer, 0, 0, W, H);
 }
+function drawSelection() { // dashed box with corner handles around the selected mark
+    const b = strokeBounds(S.sel), m = 6, x = b.x - m, y = b.y - m, w = b.w + 2 * m, h = b.h + 2 * m;
+    fctx.save(); fctx.lineWidth = 1.5; fctx.setLineDash([6, 4]);
+    fctx.strokeStyle = 'rgba(0,0,0,.55)'; fctx.strokeRect(x - 0.75, y - 0.75, w + 1.5, h + 1.5);
+    fctx.strokeStyle = '#0a84ff'; fctx.strokeRect(x, y, w, h); fctx.setLineDash([]);
+    for (const [hx, hy] of [[x, y], [x + w, y], [x, y + h], [x + w, y + h]]) { fctx.fillStyle = '#fff'; fctx.fillRect(hx - 4, hy - 4, 8, 8); fctx.strokeStyle = '#0a84ff'; fctx.strokeRect(hx - 4, hy - 4, 8, 8); }
+    fctx.restore();
+  }
 function renderFx() {
   fctx.clearRect(0, 0, W, H);
-  if (!S.cursor) return;
+  if (!S.cursor) { if (selectionBox()) drawSelection(); return; }
   const [x, y] = S.cursor;
   if (S.spot) drawSpotlight(fctx, x, y, CFG.spot, W, H);
   if (S.hl) {
@@ -599,6 +611,7 @@ function renderFx() {
     if (a > 0) drawHighlight(fctx, x, y, CFG.hl, a);
   }
   if (S.zoom) drawLens(fctx, x, y);
+  if (selectionBox()) drawSelection();
   if (eraserRing()) { // shows exactly what the eraser will remove
     const r = curWidth() / 2;
     fctx.save(); fctx.lineWidth = 1.5;
@@ -610,7 +623,8 @@ function renderFx() {
 let raf = 0;
 function kick() { if (!raf) raf = requestAnimationFrame(frame); }
 const eraserRing = () => S.tool === 'eraser' && canDraw() && !S.capturing && !S.overUI; // only where it can erase, not over the toolbar
-function fxActive() { return S.hl || S.spot || S.zoom || eraserRing(); }
+const selectionBox = () => !!S.sel && S.tool === 'select' && canDraw() && !S.capturing && S.strokes.includes(S.sel);
+function fxActive() { return S.hl || S.spot || S.zoom || eraserRing() || selectionBox(); }
 function frame() {
   raf = 0;
   const animating = S.current || (CFG.autoErase && S.strokes.some((s) => !s.seed));
@@ -634,6 +648,14 @@ surface.addEventListener('pointerdown', (e) => {
   if (S.current) endStroke(); // a release we never heard about: keep that stroke instead of losing it
   const pt = pos(e);
   if (S.tool === 'text') { e.preventDefault(); openText(pt); return; }
+  if (S.tool === 'select') { // pick the mark under the pointer and start moving it
+    e.preventDefault(); commitText();
+    const hit = hitTest(pt); S.sel = hit;
+    S.selDrag = hit ? { start: pt, last: pt, items: moveGroup(hit), moved: false } : null;
+    if (hit) try { surface.setPointerCapture(e.pointerId); } catch {}
+    surface.style.cursor = hit ? 'grabbing' : '';
+    kick(); return;
+  }
   commitText();
   try { surface.setPointerCapture(e.pointerId); } catch {} // keep drawing even if capture isn't available
   const pressure = e.pointerType === 'pen' && S.tool === 'pen';
@@ -642,6 +664,12 @@ surface.addEventListener('pointerdown', (e) => {
   redraw();
 });
 surface.addEventListener('pointermove', (e) => {
+  if (S.selDrag) {
+    const pt = pos(e), d = S.selDrag, dx = pt[0] - d.last[0], dy = pt[1] - d.last[1];
+    if (dx || dy) { d.items.forEach((st) => translate(st, dx, dy)); d.last = pt; d.moved = true; redraw(); kick(); }
+    return;
+  }
+  if (selecting()) surface.style.cursor = hitTest(pos(e)) ? 'move' : '';
   if (!S.current) return;
   const pt = pos(e), p = S.current.pts;
   if (TWO_POINT.has(S.current.tool)) p[1] = e.shiftKey ? snap(p[0], pt) : pt;
@@ -654,13 +682,18 @@ function snap(a, b) { // shift: straight lines snap to 45°, boxes/circles becom
   const ang = Math.round(Math.atan2(dy, dx) / (Math.PI / 4)) * (Math.PI / 4), len = Math.hypot(dx, dy);
   return [a[0] + Math.cos(ang) * len, a[1] + Math.sin(ang) * len];
 }
+function finishMove() {
+  const d = S.selDrag; S.selDrag = null; surface.style.cursor = '';
+  if (d?.moved) { record({ t: 'move', items: d.items, dx: d.last[0] - d.start[0], dy: d.last[1] - d.start[1] }); syncBar(); }
+}
 const endStroke = (how) => {
+  if (S.selDrag) finishMove();
   if (!S.current) return;
   const s = S.current; S.current = null;
   if (S.mode === 'overlay') track('stroke', { how: typeof how === 'string' ? how : 'next-down', tool: s.tool, pts: s.pts.length });
   if (TWO_POINT.has(s.tool) && s.pts.length < 2) { redraw(); return; }
   s.done = Date.now();
-  S.strokes.push(s); S.redo = []; S.cleared = null;
+  S.strokes.push(s); record({ t: 'add', s });
   syncBar(); redraw(); updateVisibility();
 };
 // Finish strokes however the release arrives: in the surface, anywhere in the window, or when capture is lost.
@@ -699,7 +732,7 @@ function commitText() {
   note.hidden = true;
   if (!text) return;
   S.strokes.push({ tool: 'text', text, color: curColor(), g: CFG.gradient.slice(), size: TEXT_SIZES[toolWidth()], pts: [[+note.dataset.x, +note.dataset.y]], done: Date.now() });
-  S.redo = []; S.cleared = null;
+  record({ t: 'add', s: S.strokes[S.strokes.length - 1] });
   syncBar(); redraw(); updateVisibility();
 }
 note.addEventListener('input', () => { note.style.height = 'auto'; note.style.height = note.scrollHeight + 'px'; note.style.width = Math.max(220, note.scrollWidth + 12) + 'px'; });
@@ -712,22 +745,88 @@ note.addEventListener('blur', commitText);
 
 // ============================================================ actions
 let seeded = false;
+// ---------- history: every change is an operation that can be undone and redone
+const translate = (st, dx, dy) => { st.pts = st.pts.map((p) => [p[0] + dx, p[1] + dy, ...p.slice(2)]); };
+function record(op) { S.history.push(op); if (S.history.length > 500) S.history.shift(); S.future = []; }
+function applyOp(op, dir) { // dir -1 undoes, +1 redoes; false when there was nothing left to change (e.g. ink already faded)
+  const now = Date.now();
+  if (op.t === 'add') {
+    if (dir < 0) { const i = S.strokes.indexOf(op.s); if (i < 0) return false; S.strokes.splice(i, 1); return true; }
+    op.s.done = now; S.strokes.push(op.s); return true;
+  }
+  if (op.t === 'clear') {
+    if (dir < 0) { op.list.forEach((st) => { st.done = now; }); S.strokes = [...op.list, ...S.strokes]; return op.list.length > 0; }
+    S.strokes = S.strokes.filter((st) => !op.list.includes(st)); return true;
+  }
+  if (op.t === 'move') {
+    const live = op.items.filter((st) => S.strokes.includes(st)); if (!live.length) return false;
+    live.forEach((st) => translate(st, dir * op.dx, dir * op.dy)); return true;
+  }
+  if (op.t === 'del') {
+    if (dir < 0) { op.s.done = now; S.strokes.splice(Math.min(op.i, S.strokes.length), 0, op.s); return true; }
+    const i = S.strokes.indexOf(op.s); if (i < 0) return false; S.strokes.splice(i, 1); return true;
+  }
+  return false;
+}
+function afterHistory() { syncBar(); redraw(); updateVisibility(); setTray(); }
 // Undo also brings back ink removed by Clear, so an accidental clear is one ⌘Z away.
 function undo() {
-  commitText();
-  const s = S.strokes.pop();
-  if (s) S.redo.push(s);
-  else if (S.cleared) { const now = Date.now(); S.strokes = S.cleared; S.cleared = null; S.strokes.forEach((st) => { st.done = now; }); }
-  syncBar(); redraw(); updateVisibility(); setTray();
+  commitText(); deselect();
+  while (S.history.length) { const op = S.history.pop(); if (applyOp(op, -1)) { S.future.push(op); break; } }
+  afterHistory();
 }
-function redo() { const s = S.redo.pop(); if (s) { s.done = Date.now(); S.strokes.push(s); } syncBar(); redraw(); updateVisibility(); setTray(); }
+function redo() {
+  deselect();
+  while (S.future.length) { const op = S.future.pop(); if (applyOp(op, 1)) { S.history.push(op); break; } }
+  afterHistory();
+}
 function clearAll() {
   if (seeded) seeded = 'cleared';
-  commitText();
-  if (S.strokes.length) { S.cleared = S.strokes; S.strokes = []; S.redo = []; }
-  syncBar(); redraw(); updateVisibility(); setTray();
+  commitText(); deselect();
+  if (S.strokes.length) { record({ t: 'clear', list: S.strokes }); S.strokes = []; }
+  afterHistory();
 }
-function setTool(t) { commitText(); S.tool = t; save('tool', t); syncBar(); }
+
+// ---------- select and move
+// Bounds of a mark as drawn (text is measured; highlighter strokes are wider than their width setting).
+function strokeBounds(st) {
+  if (st.tool === 'text') {
+    lctx.save(); lctx.font = `700 ${st.size}px "Schibsted Grotesk", system-ui, sans-serif`;
+    const lines = st.text.split('\n'), w = Math.max(...lines.map((l) => lctx.measureText(l).width)); lctx.restore();
+    return { x: st.pts[0][0] + 5, y: st.pts[0][1] + 4, w, h: lines.length * st.size * 1.2 };
+  }
+  const [[x0, y0], [x1, y1]] = bbox(st.pts), pad = (st.tool === 'marker' ? st.w * 3.4 : st.w) / 2 + (st.tool === 'arrow' ? Math.max(16, st.w * 4.2) / 2 : 0);
+  return { x: x0 - pad, y: y0 - pad, w: x1 - x0 + 2 * pad, h: y1 - y0 + 2 * pad };
+}
+const segDist = (p, a, b) => { const dx = b[0] - a[0], dy = b[1] - a[1], l2 = dx * dx + dy * dy; const t = l2 ? clamp(((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / l2, 0, 1) : 0; return Math.hypot(p[0] - a[0] - t * dx, p[1] - a[1] - t * dy); };
+function hits(st, p) {
+  const tol = 7 + (st.tool === 'marker' ? st.w * 3.4 : st.w || 0) / 2;
+  if (st.tool === 'text') { const b = strokeBounds(st); return p[0] >= b.x - 6 && p[0] <= b.x + b.w + 6 && p[1] >= b.y - 6 && p[1] <= b.y + b.h + 6; }
+  const q = st.pts, a = q[0], z = q[q.length - 1];
+  if (st.tool === 'rect') return p[0] >= Math.min(a[0], z[0]) - tol && p[0] <= Math.max(a[0], z[0]) + tol && p[1] >= Math.min(a[1], z[1]) - tol && p[1] <= Math.max(a[1], z[1]) + tol;
+  if (st.tool === 'ellipse') { const rx = Math.abs(z[0] - a[0]) / 2 + tol, ry = Math.abs(z[1] - a[1]) / 2 + tol, cx = (a[0] + z[0]) / 2, cy = (a[1] + z[1]) / 2; return ((p[0] - cx) / rx) ** 2 + ((p[1] - cy) / ry) ** 2 <= 1; }
+  if (TWO_POINT.has(st.tool)) return segDist(p, a, z) <= tol + (st.tool === 'arrow' ? 6 : 0);
+  if (q.length === 1) return Math.hypot(p[0] - a[0], p[1] - a[1]) <= tol;
+  for (let i = 1; i < q.length; i++) if (segDist(p, q[i - 1], q[i]) <= tol) return true;
+  return false;
+}
+// The topmost mark under the pointer (eraser marks aren't selectable).
+function hitTest(p) { for (let i = S.strokes.length - 1; i >= 0; i--) { const st = S.strokes[i]; if (st.tool !== 'eraser' && hits(st, p)) return st; } return null; }
+// Eraser marks drawn after a mark and overlapping it move with it, so its erased gaps stay where they were cut.
+function moveGroup(st) {
+  const i = S.strokes.indexOf(st), b = strokeBounds(st);
+  return [st, ...S.strokes.slice(i + 1).filter((e) => { if (e.tool !== 'eraser') return false; const c = strokeBounds(e); return c.x < b.x + b.w && c.x + c.w > b.x && c.y < b.y + b.h && c.y + c.h > b.y; })];
+}
+function deselect() { if (S.sel || S.selDrag) { S.sel = null; S.selDrag = null; kick(); } }
+function nudge(dx, dy) { if (!S.sel) return; const items = moveGroup(S.sel); items.forEach((st) => translate(st, dx, dy)); record({ t: 'move', items, dx, dy }); redraw(); kick(); }
+function deleteSelected() {
+  if (!S.sel) return false;
+  const st = S.sel, i = S.strokes.indexOf(st); deselect();
+  if (i >= 0) { S.strokes.splice(i, 1); record({ t: 'del', s: st, i }); }
+  afterHistory(); return true;
+}
+const selecting = () => S.tool === 'select' && canDraw();
+function setTool(t) { commitText(); if (t !== 'select') deselect(); S.tool = t; save('tool', t); syncBar(); kick(); }
 function setColor(i) { S.color = clamp(i, 0, 7); save('color', S.color); if (!note.hidden) { const c = curColor(); note.style.color = c === 'gradient' ? CFG.gradient[0] : c; } syncBar(); }
 function setWidth(i) { S.widths[S.tool] = clamp(i, 0, 2); save('widths', S.widths); syncBar(); kick(); }
 function toggleErase() {
@@ -741,9 +840,10 @@ function toggleBoard(force) {
   if (on === S.board) return;
   commitText();
   const from = S.board ? 'board' : 'screen', to = on ? 'board' : 'screen';
-  S.layers[from] = { strokes: S.strokes, redo: S.redo };
-  ({ strokes: S.strokes, redo: S.redo } = S.layers[to]);
-  S.board = on; S.cleared = null;
+  deselect();
+  S.layers[from] = { strokes: S.strokes, history: S.history, future: S.future };
+  ({ strokes: S.strokes, history: S.history, future: S.future } = S.layers[to]);
+  S.board = on;
   if (on && S.mode === 'overlay' && !S.drawing) setDraw(true);
   syncBar(); redraw(); setTray(); updateVisibility();
 }
@@ -812,11 +912,12 @@ function syncBar() {
   bar.querySelectorAll('[data-color]').forEach((b) => b.setAttribute('aria-pressed', +b.dataset.color === S.color));
   bar.querySelectorAll('[data-width]').forEach((b) => b.setAttribute('aria-pressed', +b.dataset.width === toolWidth()));
   root.classList.toggle('erasing', S.tool === 'eraser');
+  root.classList.toggle('selecting', S.tool === 'select');
   const set = (a, v) => { const b = bar.querySelector(`[data-act=${a}]`); if (b) b.setAttribute('aria-pressed', !!v); };
   set('erase', CFG.autoErase); set('board', S.board); set('hl', S.hl); set('spot', S.spot); set('zoom', S.zoom);
   const z = bar.querySelector('[data-act=zoom]'); if (z) z.hidden = S.mode !== 'overlay' || !barShows('act:zoom');
-  bar.querySelector('[data-act=undo]').disabled = !S.strokes.length && !S.cleared;
-  bar.querySelector('[data-act=redo]').disabled = !S.redo.length;
+  bar.querySelector('[data-act=undo]').disabled = !S.history.length;
+  bar.querySelector('[data-act=redo]').disabled = !S.future.length;
   bar.querySelector('[data-act=clear]').disabled = !S.strokes.length;
 }
 bar.addEventListener('click', (e) => {
@@ -854,6 +955,7 @@ bar.addEventListener('pointerdown', (e) => {
 
 // ============================================================ keys while drawing
 const DRAW_KEYS = [
+  [['V'], 'Select: drag a mark to move it, Delete removes it, arrow keys nudge'],
   [['P', 'M', 'E'], 'Pen, highlighter, eraser'],
   [['L', 'A', 'R', 'O', 'T'], 'Line, arrow, box, circle, text'],
   [['1', '–', '8'], 'Colours (7 gradient, 8 your custom colour)'],
@@ -881,6 +983,12 @@ document.addEventListener('keydown', (e) => {
   if (recording || !canDraw() || e.target === note || e.target.closest?.('input,select,textarea')) return;
   const k = e.key.toLowerCase();
   if (!pickerEl.hidden && k === 'escape') { e.preventDefault(); togglePicker(false); return; }
+  if (S.sel) {
+    if (k === 'backspace' || k === 'delete') { e.preventDefault(); deleteSelected(); return; }
+    if (k === 'escape') { e.preventDefault(); deselect(); return; }
+    const step = e.shiftKey ? 10 : 1, arrows = { arrowleft: [-step, 0], arrowright: [step, 0], arrowup: [0, -step], arrowdown: [0, step] };
+    if (arrows[k]) { e.preventDefault(); nudge(...arrows[k]); return; }
+  }
   if (!$('#cheat').hidden && k !== '/' && k !== '?') { toggleCheat(false); if (k === 'escape') { e.preventDefault(); return; } }
   if ((e.metaKey || e.ctrlKey) && k === 'z') { e.preventDefault(); (e.shiftKey ? redo : undo)(); return; }
   if (e.metaKey || e.ctrlKey || e.altKey) return;
@@ -1016,7 +1124,7 @@ function logErr(where, e) {
 }
 // Remote diagnostics: the latest state and recent events go to this artifact's own database,
 // in a per-person private doc, so problems can be read back and fixed. No keystrokes or text.
-const VERSION = '5.0';
+const VERSION = '5.1';
 let DB = null, diagPath = null, events = [], logDirty = false, writing = false, flushTimer = 0;
 function track(ev, data) {
   events.push({ t: new Date().toISOString().slice(11, 23), ev, ...(data || {}) });
@@ -1115,7 +1223,7 @@ async function coverDisplay() {
   const same = cur && cur.x === area.x && cur.y === area.y && cur.width === area.width && cur.height === area.height;
   if (d.id !== displayId || !same) {
     await D.window.setBounds(area);
-    if (displayId !== null && d.id !== displayId) { S.strokes = []; S.redo = []; }
+    if (displayId !== null && d.id !== displayId) { S.strokes = []; S.history = []; S.future = []; S.sel = null; }
     displayId = d.id;
   }
   winBounds = await D.window.getBounds();
@@ -1220,7 +1328,9 @@ function showUpdate(st) {
 const CAPTURE_DENIED = /could not create image|not (?:authori[sz]ed|permitted)|screen recording/i;
 let captureHelpOpened = false;
 function captureHelp(what) {
-  hud(`${what} Screen Recording. Allow <b>${HOST}</b> in System Settings → Privacy &amp; Security → Screen Recording, then quit and reopen ${HOST}.`, 10000);
+  // In the Claude app, macOS checks the installed Overmark app and, depending on the macOS version, Claude itself.
+  const apps = STANDALONE ? '<b>Overmark</b>' : '<b>Overmark</b> and <b>Claude</b>';
+  hud(`${what} Screen Recording. Allow ${apps} in System Settings → Privacy &amp; Security → Screen Recording, then quit and reopen ${STANDALONE ? 'Overmark' : 'both'}.`, 10000);
   track('captureDenied', { what });
   if (captureHelpOpened) return;
   captureHelpOpened = true; // open the right System Settings page once per session
