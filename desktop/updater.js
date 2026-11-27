@@ -2,7 +2,7 @@
 // Apple's built-in update framework only works for apps signed with a paid Developer ID, so this does it directly:
 //   1. ask GitHub Releases for the newest version (pre-releases only if you're running one);
 //   2. download the zip for this Mac's chip, and check its SHA-256 against the release's SHA256SUMS.txt;
-//   3. unpack it, check the code signature and the app ID;
+//   3. unpack it, check the code signature, the app ID and, once Overmark is signed with a Developer ID, the developer team;
 //   4. swap it in for the running copy once Overmark quits, and reopen it.
 // If the app can't be replaced where it is (still inside the DMG, or a read-only folder), it opens the release page instead.
 const { app, shell, Notification } = require('electron');
@@ -75,6 +75,10 @@ function get(url, { json = false, file = null, redirects = 5 } = {}) {
     req.on('error', reject);
   });
 }
+// codesign prints signing details on stderr; "TeamIdentifier=not set" for ad-hoc builds.
+const teamOf = (bundle) => new Promise((resolve) => execFile('/usr/bin/codesign', ['-dv', '--verbose=2', bundle], { timeout: 30000 }, (e, out, err) => {
+  const m = /TeamIdentifier=(\S+)/.exec(String(err) + String(out)); resolve(m && m[1] !== 'not' ? m[1] : null);
+}));
 const run = (cmd, args) => new Promise((resolve, reject) => execFile(cmd, args, { timeout: 120000 }, (e, out, err) => (e ? reject(new Error(`${path.basename(cmd)}: ${(err || e.message).trim()}`)) : resolve(String(out)))));
 
 // ---------------------------------------------------------------- checking
@@ -146,6 +150,13 @@ async function download() {
   const id = (await run('/usr/bin/plutil', ['-extract', 'CFBundleIdentifier', 'raw', path.join(newApp, 'Contents', 'Info.plist')])).trim();
   if (id !== APP_ID) throw new Error('the download is not Overmark (' + id + ')');
   await run('/usr/bin/codesign', ['--verify', '--deep', '--strict', newApp]);
+  // Once Overmark is signed with a Developer ID, only accept updates signed by the same Apple developer team.
+  // (An ad-hoc build has no team, so the first signed release can replace it.)
+  const mine = bundlePath() ? await teamOf(bundlePath()) : null;
+  if (mine) {
+    const theirs = await teamOf(newApp);
+    if (theirs !== mine) throw new Error(`the download is signed by a different developer (${theirs || 'unsigned'}), so it was not installed`);
+  }
   await run('/usr/bin/xattr', ['-dr', 'com.apple.quarantine', newApp]).catch(() => {});
   return { dir, zipFile, app: newApp };
 }

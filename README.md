@@ -67,7 +67,7 @@ npm install
 npm test            # end-to-end tests of the app (user flow + every feature)
 npm run dist        # → desktop/dist/Overmark-<version>-arm64.dmg and -x64.dmg
 ```
-With no Developer ID, builds are ad-hoc signed. The first time, open the app with right-click → **Open**, or go to System Settings → Privacy & Security → **Open Anyway**. To ship notarized builds, set `CSC_LINK`/`CSC_KEY_PASSWORD` and `APPLE_ID`/`APPLE_APP_SPECIFIC_PASSWORD`/`APPLE_TEAM_ID`; electron-builder then signs and notarizes.
+With no Developer ID, builds are ad-hoc signed, and the first open needs System Settings → Privacy & Security → **Open Anyway**. Releases are signed with a Developer ID and notarized by Apple once the repo's signing secrets are set, and then open like any other app. See **[docs/SIGNING.md](docs/SIGNING.md)**.
 
 Run without packaging: `npm start`.
 

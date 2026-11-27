@@ -9,12 +9,7 @@
 Not sure which you have? Apple menu → About This Mac: "Chip: Apple M…" means Apple Silicon.
 
 ## Install
-1. Open the DMG and drag **Overmark** into **Applications**.
-2. Open Overmark from Applications. macOS blocks it the first time because this free build isn't notarized by Apple: click **Done**, then go to System Settings → Privacy & Security, scroll down and click **Open Anyway**.
-   - If macOS says the app "is damaged", run this once in Terminal and open it again:
-     `xattr -dr com.apple.quarantine /Applications/Overmark.app`
-3. Overmark lives in the **menu bar** (no Dock icon). Press **⌘⇧1** to draw, **Esc** to finish.
-4. For the zoom lens, allow Overmark in System Settings → Privacy & Security → **Screen Recording**, then reopen it.
+<install>
 
 Full guide: [docs/SETUP.md](https://github.com/thepiyushway/overmark/blob/main/docs/SETUP.md)
 
@@ -28,7 +23,7 @@ Overmark checks GitHub twice a day. When a new version is out you see it in a no
 These checks run automatically before the release is published:
 - The web-app smoke test (`tests/smoke_test.py`) passes.
 - The end-to-end tests of the standalone app pass: a 33-step user flow and a 69-step test of every feature, setting, tool, shortcut rule, menu item and update notice. See [docs/TESTING.md](https://github.com/thepiyushway/overmark/blob/main/docs/TESTING.md).
-- Both apps have a valid ad-hoc signature and are set to run from the menu bar only.
+- Both apps have a valid code signature (Developer ID and notarized by Apple, when configured) and run from the menu bar only.
 - The Apple Silicon app launches and stays running.
 - The DMG images pass `hdiutil verify`.
 

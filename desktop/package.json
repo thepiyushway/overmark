@@ -41,8 +41,7 @@
     "mac": {
       "category": "public.app-category.productivity",
       "icon": "build/icon.png",
-      "identity": null,
-      "hardenedRuntime": false,
+      "hardenedRuntime": true,
       "target": [
         "dmg",
         "zip"
@@ -51,7 +50,11 @@
         "LSUIElement": true,
         "NSAppleEventsUsageDescription": "Overmark does not control other apps."
       },
-      "artifactName": "Overmark-${version}-${arch}-mac.${ext}"
+      "artifactName": "Overmark-${version}-${arch}-mac.${ext}",
+      "gatekeeperAssess": false,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist",
+      "notarize": false
     },
     "dmg": {
       "title": "Overmark ${version}",

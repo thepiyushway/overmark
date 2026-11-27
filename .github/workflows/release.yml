@@ -61,9 +61,28 @@ jobs:
       - name: Install
         working-directory: desktop
         run: npm install --no-audit --no-fund
-      - name: Build DMG and zip (Apple Silicon + Intel)
+      - name: Build DMG and zip (Apple Silicon + Intel), signed and notarized when Apple credentials are set
+        id: build
         working-directory: desktop
-        run: npm run dist || (sleep 10 && npm run dist)
+        env:
+          MAC_CERT_P12_BASE64: ${{ secrets.MAC_CERT_P12_BASE64 }}
+          MAC_CERT_PASSWORD: ${{ secrets.MAC_CERT_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          if [ -n "$MAC_CERT_P12_BASE64" ] && [ -n "$APPLE_ID" ] && [ -n "$APPLE_APP_SPECIFIC_PASSWORD" ] && [ -n "$APPLE_TEAM_ID" ]; then
+            echo "Signing with your Developer ID and notarizing with Apple"
+            echo "signed=true" >> "$GITHUB_OUTPUT"
+            export CSC_LINK="$MAC_CERT_P12_BASE64" CSC_KEY_PASSWORD="$MAC_CERT_PASSWORD" CSC_IDENTITY_AUTO_DISCOVERY=true
+            npm run sync
+            npx electron-builder --mac dmg zip --arm64 --x64 --publish never -c.mac.notarize=true
+          else
+            echo "::warning::No Developer ID configured (see docs/SIGNING.md). Building ad-hoc signed: people will need to click Open Anyway once."
+            echo "signed=false" >> "$GITHUB_OUTPUT"
+            unset APPLE_ID APPLE_APP_SPECIFIC_PASSWORD APPLE_TEAM_ID
+            npm run dist || (sleep 10 && npm run dist)
+          fi
       - name: Verify the packaged apps
         working-directory: desktop/dist
         run: |
@@ -79,12 +98,21 @@ jobs:
           PID=$!; sleep 20
           if kill -0 $PID 2>/dev/null; then echo "Overmark is running after 20 s"; kill $PID; else echo "Overmark exited early"; cat launch.log; exit 1; fi
           for f in *.dmg; do hdiutil verify "$f"; done
+          if [ "${{ steps.build.outputs.signed }}" = "true" ]; then
+            for app in mac-arm64/Overmark.app mac/Overmark.app; do
+              # What Gatekeeper checks when someone opens the download: Developer ID + Apple's notarization ticket.
+              spctl --assess --type execute --verbose=4 "$app" 2>&1 | tee spctl.txt
+              grep -q "source=Notarized Developer ID" spctl.txt
+              xcrun stapler validate "$app"
+            done
+          fi
           shasum -a 256 *.dmg *.zip | tee SHA256SUMS.txt
       - name: Release notes (CHANGELOG section + install steps)
         run: |
           awk -v v="## $VERSION" '$0 ~ "^## " { if (found) exit; if (index($0, v) == 1) { found = 1; next } } found' CHANGELOG.md > notes.md
           printf '\n---\n' >> notes.md
-          sed "s/<version>/$VERSION/g" .github/release-notes.md >> notes.md
+          if [ "${{ steps.build.outputs.signed }}" = "true" ]; then INSTALL=.github/install-signed.md; else INSTALL=.github/install-unsigned.md; fi
+          sed -e "s/<version>/$VERSION/g" -e "/<install>/{r $INSTALL" -e "d;}" .github/release-notes.md >> notes.md
           cat notes.md
       - name: Publish the GitHub Release
         uses: softprops/action-gh-release@v2
