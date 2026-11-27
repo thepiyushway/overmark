@@ -6,7 +6,7 @@ const { section, step, assert, waitFor, sleep, page, hasClass, waitMode, winStat
   drag, pixels, pixelAt, inkBox, canvasHash, toolbarShown, hudText, stored, openTab, setControl, captureAvailable, captures, resetCaptures, upd, fake, release, shot } = H;
 
 const DEFAULT_PALETTE = ['#ff3b30', '#ff9f0a', '#ffd60a', '#30d158', '#0a84ff', '#ffffff'];
-const DEFAULT_KEYS = { annotate: 'Command+Shift+1', highlight: 'Command+Shift+2', spotlight: 'Command+Shift+7', zoom: 'Command+Shift+8', annotateBare: 'Command+Shift+9', clear: 'Command+Shift+0', board: null, erase: null };
+const DEFAULT_KEYS = { annotate: 'Command+Shift+1', highlight: 'Command+Shift+2', spotlight: 'Command+Shift+7', zoom: 'Command+Shift+8', annotateBare: 'Command+Shift+9', clear: 'Command+Shift+0', board: null, erase: null, shot: null };
 const hex = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
 const near = (a, b, tol = 40) => a && b && a.every((v, i) => Math.abs(v - b[i]) <= tol);
 
@@ -47,6 +47,21 @@ const previewAlphaStats = async (sel) => (await page()).evaluate((sel) => {
   let partial = 0, solid = 0; for (let i = 3; i < d.length; i += 4) { if (d[i] > 10 && d[i] < 140) partial++; else if (d[i] >= 140) solid++; } return { partial, solid };
 }, sel);
 async function strokeBox(p, from, to, region) { await drag(p, [from, to]); return inkBox('ink', region); }
+// Width (CSS px) of the transparent gap around x on row y of the ink layer.
+const gapAt = async (y, x) => (await page()).evaluate(([y, x]) => {
+  const c = document.getElementById('ink'), k = c.width / c.getBoundingClientRect().width, w = c.width / k;
+  const row = c.getContext('2d').getImageData(0, Math.round(y * k), c.width, 1).data, a = (px) => row[Math.round(px * k) * 4 + 3];
+  if (a(x) > 40) return 0; let l = x, r = x; while (l > 0 && a(l - 1) <= 40) l--; while (r < w - 1 && a(r + 1) <= 40) r++; return r - l + 1;
+}, [y, x]);
+// A stylus stroke: real PointerEvents with pointerType "pen" and a fixed pressure.
+async function penStroke(p, y, pressure) {
+  await p.evaluate(([y, pr]) => {
+    const el = document.getElementById('surface'), r = el.getBoundingClientRect();
+    const ev = (type, x) => el.dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, pointerId: 77, pointerType: 'pen', isPrimary: true, button: 0, buttons: type === 'pointerup' ? 0 : 1, pressure: type === 'pointerup' ? 0 : pr, clientX: r.left + x, clientY: r.top + y }));
+    ev('pointerdown', 300); for (let x = 310; x <= 800; x += 10) ev('pointermove', x); ev('pointerup', 800);
+  }, [y, pressure]);
+  await sleep(150);
+}
 
 (async () => {
   await H.launch({ fresh: true });
@@ -334,8 +349,8 @@ async function strokeBox(p, from, to, region) { await drag(p, [from, to]); retur
   section('Drawing tools and toolbar');
   await step('Every tool button selects its tool', async () => {
     await toOverlay(); const p = await startDraw();
-    for (const t of ['pen', 'marker', 'line', 'arrow', 'rect', 'ellipse', 'text', 'pen']) { await p.click(`[data-tool="${t}"]`); assert(await p.$eval(`[data-tool="${t}"]`, (b) => b.getAttribute('aria-pressed')) === 'true', t); }
-    return '7 tools';
+    for (const t of ['pen', 'marker', 'eraser', 'line', 'arrow', 'rect', 'ellipse', 'text', 'pen']) { await p.click(`[data-tool="${t}"]`); assert(await p.$eval(`[data-tool="${t}"]`, (b) => b.getAttribute('aria-pressed')) === 'true', t); }
+    return '8 tools';
   });
   await step('Colour keys 1–6 draw in the palette colours', async () => {
     const p = await page(); const got = [];
@@ -393,10 +408,10 @@ async function strokeBox(p, from, to, region) { await drag(p, [from, to]); retur
     assert((await pixels()) === 0, 'a new stroke after clearing should end the chance to restore');
     await clearInk(); return 'both strokes restored with ⌘Z';
   });
-  await step('Backspace clears; E toggles auto-erase', async () => {
+  await step('Backspace clears; F toggles auto-erase (fading ink)', async () => {
     const p = await page(); await drag(p, [[300, 300], [600, 300]]); await p.keyboard.press('Backspace'); await sleep(120); assert((await pixels()) === 0, 'backspace');
-    await p.keyboard.press('e'); assert(await p.$eval('[data-act="erase"]', (b) => b.getAttribute('aria-pressed')) === 'true', 'erase on');
-    await p.keyboard.press('e'); assert(await p.$eval('[data-act="erase"]', (b) => b.getAttribute('aria-pressed')) === 'false', 'erase off');
+    await p.keyboard.press('f'); assert(await p.$eval('[data-act="erase"]', (b) => b.getAttribute('aria-pressed')) === 'true', 'erase on');
+    await p.keyboard.press('f'); assert(await p.$eval('[data-act="erase"]', (b) => b.getAttribute('aria-pressed')) === 'false', 'erase off');
   });
   await step('Toolbar buttons: highlight, spotlight, whiteboard, key sheet, Done', async () => {
     const p = await page(); const pressed = (a) => p.$eval(`[data-act="${a}"]`, (b) => b.getAttribute('aria-pressed'));
@@ -426,6 +441,147 @@ async function strokeBox(p, from, to, region) { await drag(p, [from, to]); retur
     await p.keyboard.press('b'); await sleep(200); assert(near((await pixelAt('ink', 450, 700)).slice(0, 3), onBoard.slice(0, 3), 10), 'board ink lost');
     await p.keyboard.press('b'); await clearInk(); await stopDraw();
   });
+
+  // ==================================================================== Eraser
+  section('Eraser');
+  // Start from a fresh overlay: an earlier step dragged the toolbar into the middle of the screen.
+  await stopDraw(); await toSettings('general'); await toOverlay();
+  await step('E selects the eraser; it removes only the part it passes over', async () => {
+    const p = await startDraw(); await p.keyboard.press('p'); await p.keyboard.press('1'); await p.click('[data-width="1"]');
+    await drag(p, [[200, 300], [1000, 300]]); const before = await pixels();
+    await p.keyboard.press('e'); assert(await p.$eval('[data-tool="eraser"]', (b) => b.getAttribute('aria-pressed')) === 'true', 'E did not select the eraser');
+    await p.click('[data-width="1"]'); await drag(p, [[600, 220], [600, 380]]);
+    const after = await pixels(), gap = await gapAt(300, 600);
+    assert(after < before && after > before * 0.8, `ink ${before} → ${after}`); assert(gap > 20, 'no gap: ' + gap);
+    assert((await pixelAt('ink', 300, 300))[3] > 200 && (await pixelAt('ink', 900, 300))[3] > 200, 'erased too much');
+    return `${gap.toFixed(0)} px gap, rest of the line kept`;
+  });
+  await step('Eraser sizes: small, medium and large cut 16, 36 and 80 px', async () => {
+    const p = await page(); const gaps = [];
+    for (const [i, y] of [[0, 420], [1, 500], [2, 580]]) {
+      await p.keyboard.press('p'); await drag(p, [[200, y], [1000, y]]); await p.keyboard.press('e'); await p.click(`[data-width="${i}"]`);
+      await drag(p, [[600, y - 70], [600, y + 70]]); gaps.push(await gapAt(y, 600));
+    }
+    [16, 36, 80].forEach((want, i) => assert(Math.abs(gaps[i] - want) <= 8, `size ${i}: ${gaps[i]} px, want ≈${want}`));
+    await clearInk(); return gaps.map((g) => g.toFixed(0) + ' px').join(', ');
+  });
+  await step('− and = change the eraser size', async () => {
+    const p = await page(); await p.keyboard.press('e'); await p.click('[data-width="1"]');
+    await p.keyboard.press('='); assert(await p.$eval('[data-width="2"]', (b) => b.getAttribute('aria-pressed')) === 'true', '= did not grow it');
+    await p.keyboard.press('-'); await p.keyboard.press('-'); assert(await p.$eval('[data-width="0"]', (b) => b.getAttribute('aria-pressed')) === 'true', '− did not shrink it');
+  });
+  await step('A ring at the pointer shows the eraser size (not over the toolbar)', async () => {
+    const p = await page(); await p.keyboard.press('e'); await p.click('[data-width="2"]');
+    await p.mouse.move(700, 450); await p.mouse.move(720, 460, { steps: 3 });
+    const ring = await waitFor(async () => { const b = await inkBox('fx', [620, 360, 200, 200]); return b.n > 50 && b; }, 'ring drawn');
+    assert(Math.abs(ring.w - 82) < 8 && Math.abs(ring.h - 82) < 8, `ring ${ring.w}×${ring.h}`);
+    const tb = await (await p.$('[data-tool="pen"]')).boundingBox(); await p.mouse.move(tb.x + tb.width / 2, tb.y + tb.height / 2); await sleep(150);
+    assert((await inkBox('fx', [tb.x - 60, Math.max(0, tb.y - 60), 120, 120])).n === 0, 'ring drawn over the toolbar');
+    await p.mouse.move(720, 460); await p.keyboard.press('p'); await sleep(150); assert((await inkBox('fx', [620, 360, 200, 200])).n === 0, 'ring stays with the pen');
+    return `${ring.w.toFixed(0)} px ring for the 80 px eraser`;
+  });
+  await step('Erasing can be undone and redone', async () => {
+    const p = await page(); await p.keyboard.press('p'); await drag(p, [[200, 300], [1000, 300]]); const full = await pixels();
+    await p.keyboard.press('e'); await drag(p, [[600, 220], [600, 380]]); const cut = await pixels();
+    await p.keyboard.press('Control+z'); await sleep(120); assert((await pixels()) === full, 'undo did not restore');
+    await p.keyboard.press('Control+Shift+z'); await sleep(120); assert((await pixels()) === cut, 'redo did not erase again');
+    await clearInk();
+  });
+  await step('The eraser works on highlighter ink and text too', async () => {
+    const p = await page(); await p.keyboard.press('m'); await drag(p, [[200, 300], [1000, 300]]);
+    await p.keyboard.press('t'); await p.mouse.click(400, 450); await p.keyboard.type('Erase me'); await p.keyboard.press('Enter'); await sleep(150);
+    const before = await pixels(); await p.keyboard.press('e'); await p.click('[data-width="2"]');
+    await drag(p, [[600, 240], [600, 360]]); await drag(p, [[380, 480], [700, 480]]);
+    const after = await pixels(); assert(after < before * 0.9, `${before} → ${after}`); await clearInk(); return `${before} → ${after} px`;
+  });
+  await step('The eraser never cuts through the whiteboard', async () => {
+    const p = await page(); await p.keyboard.press('b'); await sleep(200); await p.keyboard.press('p'); await drag(p, [[200, 300], [1000, 300]]);
+    await p.keyboard.press('e'); await p.click('[data-width="2"]'); await drag(p, [[600, 220], [600, 380]]);
+    const c = await pixelAt('ink', 600, 300); assert(c[3] === 255 && c[0] > 235 && c[1] > 235, 'hole in the board: ' + c);
+    const ink = await pixelAt('ink', 300, 300); assert(ink[0] > 200 && ink[1] < 120, 'ink gone: ' + ink);
+    await p.keyboard.press('b'); await clearInk(); return 'board intact under the erased gap';
+  });
+  await step('With auto-erase on, erased ink never comes back while the rest fades', async () => {
+    await stopDraw(); await toSettings('annotate'); await setControl('eraseAfter', 2); await setControl('autoErase', true);
+    const p = await toOverlay(); await startDraw(); await p.keyboard.press('p'); await drag(p, [[200, 300], [1000, 300]]);
+    await p.keyboard.press('e'); await p.click('[data-width="1"]'); await drag(p, [[600, 220], [600, 380]]);
+    for (let i = 0; i < 8; i++) { assert((await pixelAt('ink', 600, 300))[3] < 40, `erased gap reappeared after ${i * 0.4}s`); await sleep(400); }
+    await waitFor(async () => (await pixels()) === 0, 'everything faded', 6000);
+    await stopDraw(); await toSettings('annotate'); await setControl('autoErase', false); await setControl('eraseAfter', 3);
+  });
+
+  // ==================================================================== Sizes, colours and pressure
+  section('Sizes, colours and pressure');
+  await step('Each tool remembers its own size', async () => {
+    const p = await toOverlay(); await startDraw(); const pressed = async () => p.$eval('[data-width][aria-pressed="true"]', (b) => +b.dataset.width);
+    await p.keyboard.press('p'); await p.click('[data-width="2"]'); await p.keyboard.press('m'); await p.click('[data-width="0"]'); await p.keyboard.press('e'); await p.click('[data-width="1"]');
+    await p.keyboard.press('p'); assert((await pressed()) === 2, 'pen'); await p.keyboard.press('m'); assert((await pressed()) === 0, 'highlighter'); await p.keyboard.press('e'); assert((await pressed()) === 1, 'eraser');
+    await p.keyboard.press('p'); const pen = await strokeBox(p, [300, 300], [800, 300]); await p.keyboard.press('m'); const hl = await strokeBox(p, [300, 500], [800, 500], [280, 440, 540, 120]);
+    assert(pen.h > 8, 'thick pen ' + pen.h); await clearInk(); return `pen thick (${pen.h.toFixed(0)} px), highlighter thin, eraser medium`;
+  });
+  await step('The 8th swatch opens 24 quick colours; picking one draws in it', async () => {
+    const p = await page(); await p.click('[data-picker]');
+    const n = await waitFor(async () => !(await p.$eval('#picker', (e) => e.hidden)) && (await p.$$('#picker [data-pick]')).length, 'picker open');
+    assert(n === 24, n + ' colours'); await p.click('#picker [data-pick="#00c7be"]');
+    assert(await p.$eval('#picker', (e) => e.hidden), 'picker stayed open');
+    assert(await p.$eval('[data-color="7"]', (b) => b.getAttribute('aria-pressed')) === 'true', 'custom not selected');
+    await p.keyboard.press('p'); const b = await strokeBox(p, [300, 300], [800, 300]); assert(near(b.color, [0, 199, 190], 40), 'ink ' + b.color);
+    assert((await stored('cfg')).customColor === '#00c7be', 'not saved'); await clearInk(); return 'teal from the picker';
+  });
+  await step('Esc and clicking elsewhere close the picker; key 8 picks the custom colour', async () => {
+    const p = await page(); await p.click('[data-picker]'); await p.keyboard.press('Escape'); assert(await p.$eval('#picker', (e) => e.hidden), 'Esc'); assert(await hasClass('drawing'), 'Esc should only close the picker');
+    await p.click('[data-picker]'); await p.mouse.click(700, 650); assert(await p.$eval('#picker', (e) => e.hidden), 'click outside');
+    await p.keyboard.press('1'); await p.keyboard.press('8'); assert(await p.$eval('[data-color="7"]', (b) => b.getAttribute('aria-pressed')) === 'true', 'key 8'); await clearInk();
+  });
+  await step('Settings → Annotate → Custom colour changes the swatch and the ink', async () => {
+    await stopDraw(); await toSettings('annotate'); await setControl('customColor', '#ff00ff');
+    const p = await toOverlay(); await startDraw(); await p.keyboard.press('8'); await p.keyboard.press('p');
+    const b = await strokeBox(p, [300, 300], [800, 300]); assert(near(b.color, [255, 0, 255], 40), 'ink ' + b.color); await clearInk();
+  });
+  await step('Stylus pressure: a harder press draws a thicker line (mouse strokes unaffected)', async () => {
+    const p = await page(); await p.keyboard.press('p'); await p.keyboard.press('1'); await p.click('[data-width="1"]');
+    await penStroke(p, 300, 0.1); const light = (await inkBox('ink', [280, 270, 540, 60])).h;
+    await penStroke(p, 450, 1.0); const hard = (await inkBox('ink', [280, 420, 540, 60])).h;
+    const mouse = (await strokeBox(p, [300, 600], [800, 600], [280, 570, 540, 60])).h;
+    assert(hard > light * 2, `light ${light}, hard ${hard}`); assert(Math.abs(mouse - 6) < 4, 'mouse width ' + mouse);
+    await clearInk(); return `light ${light.toFixed(0)} px, hard ${hard.toFixed(0)} px, mouse ${mouse.toFixed(0)} px`;
+  });
+
+  // ==================================================================== Screenshot
+  section('Screenshot');
+  const desktop = async () => H.app().evaluate(({ app }) => app.getPath('desktop'));
+  const shots = async () => { const fs = require('fs'); try { return fs.readdirSync(await desktop()).filter((f) => /^Overmark .*\.png$/.test(f)); } catch { return []; } };
+  if (captureAvailable()) {
+    await step('The toolbar button saves the screen with ink to the Desktop, hiding the toolbar while it captures', async () => {
+      const p = await page(); await drag(p, [[300, 300], [800, 300]]); resetCaptures(); const n0 = (await shots()).length;
+      await p.click('[data-act="shot"]');
+      const during = await waitFor(async () => (await hasClass('capturing')) && (await p.$eval('#bar', (b) => getComputedStyle(b).visibility)), 'capturing', 2000);
+      assert(during === 'hidden', 'toolbar visible during capture'); assert((await pixels()) > 0, 'ink hidden during capture');
+      const t = await waitFor(async () => { const t = await hudText(); return /Screenshot saved/.test(t) && t; }, 'saved notice', 8000);
+      const files = await shots(); assert(files.length === n0 + 1, 'files ' + files);
+      const w = await winState(); const cap = captures().at(-1);
+      assert(cap.includes('-t png') && cap.includes(`-R${w.bounds.x},${w.bounds.y},${w.bounds.width},${w.bounds.height}`), 'capture ' + cap);
+      assert(!(await hasClass('capturing')) && (await toolbarShown()), 'toolbar not back');
+      await shot('screenshot-notice'); return `${files.at(-1)}; "${t.replace(/\s+/g, ' ')}"`;
+    });
+    await step('It is copied to the clipboard', async () => {
+      const empty = await H.app().evaluate(({ clipboard }) => clipboard.readImage().isEmpty()); assert(!empty, 'clipboard has no image');
+    });
+    await step('C key and the menu bar item take screenshots too; quick repeats never overwrite each other', async () => {
+      const p = await page(); const n0 = (await shots()).length;
+      await p.keyboard.press('c'); await waitFor(async () => (await shots()).length === n0 + 1, 'C key', 8000);
+      await stopDraw(); await menuClick('Take screenshot'); await waitFor(async () => (await shots()).length === n0 + 2, 'menu item', 8000);
+    });
+    await step('Screenshot can have its own global shortcut', async () => {
+      const n0 = (await shots()).length; const m = await rec('shot', 'Meta+Shift+P'); assert(/Saved/.test(m), m);
+      await waitFor(() => isRegistered('Command+Shift+P'), 'registered'); await toOverlay(); await shortcut('Command+Shift+P');
+      await waitFor(async () => (await shots()).length === n0 + 1, 'shortcut screenshot', 8000);
+      const k = await toSettings('keys'); await k.click('[data-do="resetkeys"]'); await sleep(200);
+    });
+    await step('The menu item is unavailable in the Settings window', async () => { await toSettings('general'); assert(!(await menuItem('Take screenshot')).enabled, 'enabled in Settings'); });
+  } else {
+    await step('Screenshot (skipped: no screencapture here; CI installs tests/fixtures/fake-screencapture.sh)', async () => 'skipped');
+  }
 
   // ==================================================================== Menu bar menu
   section('Menu bar menu');

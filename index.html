@@ -97,6 +97,14 @@ footer{padding:28px 0 40px;color:var(--mute);font-size:13px}
 .tb svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
 .tb .sw{width:14px;height:14px;border-radius:50%;box-shadow:inset 0 0 0 1px rgba(0,0,0,.25)}
 .tb button[aria-pressed=true] .sw{box-shadow:0 0 0 2px rgba(18,18,20,1),0 0 0 4px #fff}
+.tb .sw.custom{background:conic-gradient(from 0deg,#ff3b30,#ffd60a,#30d158,#0a84ff,#bf5af2,#ff3b30);position:relative}
+.tb .sw.custom::after{content:"";position:absolute;inset:3px;border-radius:50%;background:var(--c);box-shadow:0 0 0 1px rgba(0,0,0,.25)}
+#picker{position:absolute;z-index:8;display:grid;grid-template-columns:repeat(8,24px);gap:6px;padding:10px;border-radius:14px;background:rgba(22,22,24,.94);box-shadow:0 10px 30px rgba(0,0,0,.35),inset 0 0 0 1px rgba(255,255,255,.08)}
+#picker[hidden]{display:none}
+#picker button{width:24px;height:24px;border-radius:50%;border:0;padding:0;cursor:pointer;box-shadow:inset 0 0 0 1px rgba(255,255,255,.25)}
+#picker button[aria-pressed=true]{box-shadow:0 0 0 2px rgba(22,22,24,1),0 0 0 4px #fff}
+.erasing #surface,.overlay.drawing.erasing #surface{cursor:none}
+.capturing #bar,.capturing #hud,.capturing #cheat,.capturing #picker,.capturing #note{visibility:hidden!important}
 .tb .dot{border-radius:50%;background:currentColor}
 .tb .sep{width:1px;height:20px;background:rgba(255,255,255,.14);margin:0 3px}
 .tb .grip{cursor:grab;width:18px}
@@ -274,6 +282,7 @@ pre.diag{white-space:pre-wrap;overflow-wrap:anywhere;background:var(--bg);border
   <canvas id="fx"></canvas>
   <textarea id="note" hidden spellcheck="false" aria-label="Text annotation"></textarea>
   <div class="tb" id="bar" role="toolbar" aria-label="Drawing tools"></div>
+  <div id="picker" role="dialog" aria-label="Choose a colour" hidden></div>
   <div id="cheat" hidden></div>
 </div>
 
@@ -304,6 +313,7 @@ const DEFAULT_CFG = {
   hl: { shape: 'circle', size: 56, color: '#ffd60a', opacity: 0.32, border: 'solid', borderWidth: 3, glow: true, anim: 'none', hideIdle: true, idleMs: 1500 },
   spot: { shape: 'circle', size: 190, dim: 0.62, feather: 26 },
   zoom: { level: 2.5, size: 240, shape: 'circle', border: true },
+  customColor: '#bf5af2',
 };
 function mergeDeep(base, over) {
   const out = Array.isArray(base) ? base.slice() : { ...base };
@@ -324,12 +334,16 @@ let cfgSaveTimer = 0;
 const saveCfg = () => { clearTimeout(cfgSaveTimer); cfgSaveTimer = setTimeout(() => save('cfg', CFG), 150); };
 
 const WIDTHS = [3, 6, 11];
+const ERASER_SIZES = [16, 36, 80]; // eraser diameters (px) for small, medium, large
 const TEXT_SIZES = [22, 32, 46];
-const COLOR_NAMES = ['Colour 1', 'Colour 2', 'Colour 3', 'Colour 4', 'Colour 5', 'Colour 6', 'Gradient'];
+const COLOR_NAMES = ['Colour 1', 'Colour 2', 'Colour 3', 'Colour 4', 'Colour 5', 'Colour 6', 'Gradient', 'Custom colour'];
+const PICKER_COLORS = ['#ff3b30', '#ff6b22', '#ff9f0a', '#ffd60a', '#d4e157', '#30d158', '#00c7be', '#64d2ff', '#0a84ff', '#5e5ce6', '#bf5af2', '#ff2d95',
+  '#a2845e', '#8e8e93', '#ffffff', '#000000', '#ff8a80', '#ffd180', '#ccff90', '#a7ffeb', '#80d8ff', '#b388ff', '#f48fb1', '#1c3d5a'];
 const I = (d) => `<svg viewBox="0 0 24 24" aria-hidden="true">${d}</svg>`;
 const TOOLS = [
   { id: 'pen', key: 'p', label: 'Pen', icon: I('<path d="M4 20l4-1L19 8l-3-3L5 16z"/>') },
   { id: 'marker', key: 'm', label: 'Highlighter', icon: I('<path d="M4 20h7M7 16l9-9 3 3-9 9H7z"/>') },
+  { id: 'eraser', key: 'e', label: 'Eraser', icon: I('<path d="M15.5 4.5l4 4L10 18H6l-2.5-2.5z"/><path d="M11.5 8.5l4 4M10 21h10"/>') },
   { id: 'line', key: 'l', label: 'Line', icon: I('<path d="M5 19L19 5"/>') },
   { id: 'arrow', key: 'a', label: 'Arrow', icon: I('<path d="M5 19L19 5M10 5h9v9"/>') },
   { id: 'rect', key: 'r', label: 'Box', icon: I('<rect x="4" y="6" width="16" height="12" rx="1.5"/>') },
@@ -339,19 +353,25 @@ const TOOLS = [
 const TWO_POINT = new Set(['line', 'arrow', 'rect', 'ellipse']);
 
 const S = {
-  tool: load('tool', 'pen'), color: load('color', 0), width: load('width', 1),
+  tool: load('tool', 'pen'), color: load('color', 0),
+  // Each tool remembers its own size (index into WIDTHS / ERASER_SIZES / TEXT_SIZES).
+  widths: { ...Object.fromEntries(['pen', 'marker', 'eraser', 'line', 'arrow', 'rect', 'ellipse', 'text'].map((t) => [t, load('width', 1)])), ...load('widths', {}) },
   mode: 'page', drawing: false, strokes: [], redo: [], current: null,
   cursor: null, lastMove: 0, hl: false, spot: false, zoom: false, board: false,
   layers: { screen: { strokes: [], redo: [] }, board: { strokes: [], redo: [] } },
 };
-if (S.color > 6) S.color = 0;
+if (S.color > 7) S.color = 0;
+if (!['pen', 'marker', 'eraser', 'line', 'arrow', 'rect', 'ellipse', 'text'].includes(S.tool)) S.tool = 'pen';
+const toolWidth = () => clamp(S.widths[S.tool] ?? 1, 0, 2);
 
 // ============================================================ canvas sizing
 let W = 0, H = 0;
+// Strokes are drawn on their own layer and composited over the whiteboard, so the eraser removes ink only.
+const layer = document.createElement('canvas'), lctx = layer.getContext('2d');
 function fitCanvas() {
   const dpr = window.devicePixelRatio || 1;
   W = surface.clientWidth; H = surface.clientHeight;
-  for (const [cv, c] of [[ink, ctx], [fxc, fctx]]) {
+  for (const [cv, c] of [[ink, ctx], [fxc, fctx], [layer, lctx]]) {
     cv.width = Math.max(1, Math.round(W * dpr)); cv.height = Math.max(1, Math.round(H * dpr));
     c.setTransform(dpr, 0, 0, dpr, 0, 0);
   }
@@ -390,6 +410,15 @@ function drawStroke(c, s, alpha) {
     c.restore();
     return;
   }
+  if (s.tool === 'eraser') { // cuts through the ink layer; a dot for a click, a smooth path for a drag
+    c.globalCompositeOperation = 'destination-out';
+    c.strokeStyle = c.fillStyle = '#000'; c.lineWidth = s.w;
+    c.beginPath();
+    if (p.length === 1) { c.arc(p[0][0], p[0][1], s.w / 2, 0, Math.PI * 2); c.fill(); c.restore(); return; }
+    c.moveTo(p[0][0], p[0][1]);
+    for (let i = 1; i < p.length - 1; i++) c.quadraticCurveTo(p[i][0], p[i][1], (p[i][0] + p[i + 1][0]) / 2, (p[i][1] + p[i + 1][1]) / 2);
+    c.lineTo(p[p.length - 1][0], p[p.length - 1][1]); c.stroke(); c.restore(); return;
+  }
   const [b0, b1] = TWO_POINT.has(s.tool) ? [p[0], p[p.length - 1]] : bbox(p);
   c.strokeStyle = c.fillStyle = paint(c, s, b0, b1);
   const marker = s.tool === 'marker';
@@ -397,6 +426,14 @@ function drawStroke(c, s, alpha) {
   c.lineWidth = marker ? s.w * 3.4 : s.w;
   if (!marker) { c.shadowColor = 'rgba(0,0,0,.3)'; c.shadowBlur = Math.max(2, s.w * 0.7); c.shadowOffsetY = 1; }
   c.beginPath();
+  if (s.pressure && s.tool === 'pen' && p.length > 1) { // stylus: thickness follows pressure, segment by segment
+    c.shadowBlur = 0;
+    for (let i = 1; i < p.length; i++) {
+      c.lineWidth = s.w * (0.3 + 1.4 * ((p[i - 1][2] ?? 0.5) + (p[i][2] ?? 0.5)) / 2);
+      c.beginPath(); c.moveTo(p[i - 1][0], p[i - 1][1]); c.lineTo(p[i][0], p[i][1]); c.stroke();
+    }
+    c.restore(); return;
+  }
   if (s.tool === 'pen' || marker) {
     if (p.length === 1) { c.arc(p[0][0], p[0][1], c.lineWidth / 2, 0, Math.PI * 2); c.fill(); c.restore(); return; }
     c.moveTo(p[0][0], p[0][1]);
@@ -518,14 +555,20 @@ const holdMs = () => CFG.eraseAfter * 1000;
 function renderInk() {
   ctx.clearRect(0, 0, W, H);
   drawBoard(ctx);
+  lctx.clearRect(0, 0, W, H);
   const now = Date.now();
-  if (CFG.autoErase) S.strokes = S.strokes.filter((s) => s.seed || now - s.done < holdMs() + FADE_OUT);
+  if (CFG.autoErase) {
+    const live = (s) => s.seed || now - s.done < holdMs() + FADE_OUT;
+    // An eraser mark stays while any ink drawn before it is still fading, so erased ink never reappears.
+    S.strokes = S.strokes.filter((s, i, all) => (s.tool === 'eraser' ? all.slice(0, i).some((t) => t.tool !== 'eraser' && live(t)) : live(s)));
+  }
   for (const s of S.strokes) {
     const age = now - s.done;
-    const a = CFG.autoErase && !s.seed && age > holdMs() ? 1 - (age - holdMs()) / FADE_OUT : 1;
-    drawStroke(ctx, s, a);
+    const a = s.tool !== 'eraser' && CFG.autoErase && !s.seed && age > holdMs() ? 1 - (age - holdMs()) / FADE_OUT : 1;
+    drawStroke(lctx, s, a);
   }
-  if (S.current) drawStroke(ctx, S.current, 1);
+  if (S.current) drawStroke(lctx, S.current, 1);
+  ctx.drawImage(layer, 0, 0, W, H);
 }
 function renderFx() {
   fctx.clearRect(0, 0, W, H);
@@ -538,10 +581,18 @@ function renderFx() {
     if (a > 0) drawHighlight(fctx, x, y, CFG.hl, a);
   }
   if (S.zoom) drawLens(fctx, x, y);
+  if (eraserRing()) { // shows exactly what the eraser will remove
+    const r = curWidth() / 2;
+    fctx.save(); fctx.lineWidth = 1.5;
+    fctx.strokeStyle = 'rgba(0,0,0,.6)'; fctx.beginPath(); fctx.arc(x, y, r + 0.75, 0, Math.PI * 2); fctx.stroke();
+    fctx.strokeStyle = '#fff'; fctx.beginPath(); fctx.arc(x, y, Math.max(1, r - 0.75), 0, Math.PI * 2); fctx.stroke();
+    fctx.restore();
+  }
 }
 let raf = 0;
 function kick() { if (!raf) raf = requestAnimationFrame(frame); }
-function fxActive() { return S.hl || S.spot || S.zoom; }
+const eraserRing = () => S.tool === 'eraser' && canDraw() && !S.capturing && !S.overUI; // only where it can erase, not over the toolbar
+function fxActive() { return S.hl || S.spot || S.zoom || eraserRing(); }
 function frame() {
   raf = 0;
   const animating = S.current || (CFG.autoErase && S.strokes.some((s) => !s.seed));
@@ -555,8 +606,8 @@ const redraw = () => { dirty = true; kick(); };
 // ============================================================ drawing input
 const canDraw = () => S.mode === 'page' || (S.mode === 'overlay' && S.drawing);
 const pos = (e) => { const r = surface.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
-const curColor = () => (S.color === 6 ? 'gradient' : CFG.palette[S.color]);
-const curWidth = () => Math.round(WIDTHS[S.width] * CFG.widthScale * 10) / 10;
+const curColor = () => (S.color === 6 ? 'gradient' : S.color === 7 ? CFG.customColor : CFG.palette[S.color]);
+const curWidth = () => (S.tool === 'eraser' ? ERASER_SIZES[toolWidth()] : Math.round(WIDTHS[toolWidth()] * CFG.widthScale * 10) / 10);
 
 surface.addEventListener('pointerdown', (e) => {
   const where = e.target.closest('#bar') ? 'toolbar' : e.target.closest('#note') ? 'note' : e.target.closest('#cheat') ? 'cheat' : 'canvas';
@@ -566,8 +617,9 @@ surface.addEventListener('pointerdown', (e) => {
   const pt = pos(e);
   if (S.tool === 'text') { e.preventDefault(); openText(pt); return; }
   commitText();
-  surface.setPointerCapture(e.pointerId);
-  S.current = { tool: S.tool, color: curColor(), g: CFG.gradient.slice(), w: curWidth(), pts: [pt] };
+  try { surface.setPointerCapture(e.pointerId); } catch {} // keep drawing even if capture isn't available
+  const pressure = e.pointerType === 'pen' && S.tool === 'pen';
+  S.current = { tool: S.tool, color: curColor(), g: CFG.gradient.slice(), w: curWidth(), pts: [pressure ? [...pt, e.pressure || 0.5] : pt], pressure };
   e.preventDefault();
   redraw();
 });
@@ -575,7 +627,7 @@ surface.addEventListener('pointermove', (e) => {
   if (!S.current) return;
   const pt = pos(e), p = S.current.pts;
   if (TWO_POINT.has(S.current.tool)) p[1] = e.shiftKey ? snap(p[0], pt) : pt;
-  else { const l = p[p.length - 1]; if (Math.hypot(pt[0] - l[0], pt[1] - l[1]) > 1.2) p.push(pt); }
+  else { const l = p[p.length - 1]; if (Math.hypot(pt[0] - l[0], pt[1] - l[1]) > 1.2) p.push(S.current.pressure ? [...pt, e.pressure || 0.5] : pt); }
   redraw();
 });
 function snap(a, b) { // shift: straight lines snap to 45°, boxes/circles become square/round
@@ -605,6 +657,8 @@ function setCursor(p) {
   if (!S.cursor || p[0] !== S.cursor[0] || p[1] !== S.cursor[1]) { S.cursor = p; S.lastMove = Date.now(); if (fxActive()) kick(); }
 }
 window.addEventListener('pointermove', (e) => {
+  const overUI = !!e.target.closest?.('#bar,#picker,#cheat,#note');
+  if (overUI !== !!S.overUI) { S.overUI = overUI; kick(); }
   const r = surface.getBoundingClientRect();
   const inside = e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom;
   if (inside) setCursor(pos(e)); else if (S.mode !== 'overlay') setCursor(null);
@@ -613,7 +667,7 @@ window.addEventListener('pointermove', (e) => {
 // ============================================================ text tool
 function openText(pt) {
   commitText();
-  const size = TEXT_SIZES[S.width];
+  const size = TEXT_SIZES[toolWidth()];
   note.hidden = false; note.value = '';
   note.dataset.x = pt[0]; note.dataset.y = pt[1];
   const col = curColor();
@@ -626,7 +680,7 @@ function commitText() {
   const text = note.value.replace(/\s+$/, '');
   note.hidden = true;
   if (!text) return;
-  S.strokes.push({ tool: 'text', text, color: curColor(), g: CFG.gradient.slice(), size: TEXT_SIZES[S.width], pts: [[+note.dataset.x, +note.dataset.y]], done: Date.now() });
+  S.strokes.push({ tool: 'text', text, color: curColor(), g: CFG.gradient.slice(), size: TEXT_SIZES[toolWidth()], pts: [[+note.dataset.x, +note.dataset.y]], done: Date.now() });
   S.redo = []; S.cleared = null;
   syncBar(); redraw(); updateVisibility();
 }
@@ -656,8 +710,8 @@ function clearAll() {
   syncBar(); redraw(); updateVisibility(); setTray();
 }
 function setTool(t) { commitText(); S.tool = t; save('tool', t); syncBar(); }
-function setColor(i) { S.color = i; save('color', i); if (!note.hidden) note.style.color = i === 6 ? CFG.gradient[0] : CFG.palette[i]; syncBar(); }
-function setWidth(i) { S.width = clamp(i, 0, 2); save('width', S.width); syncBar(); }
+function setColor(i) { S.color = clamp(i, 0, 7); save('color', S.color); if (!note.hidden) { const c = curColor(); note.style.color = c === 'gradient' ? CFG.gradient[0] : c; } syncBar(); }
+function setWidth(i) { S.widths[S.tool] = clamp(i, 0, 2); save('widths', S.widths); syncBar(); kick(); }
 function toggleErase() {
   CFG.autoErase = !CFG.autoErase; saveCfg();
   if (CFG.autoErase) { const now = Date.now(); S.strokes.forEach((s) => { s.done = now; }); }
@@ -699,6 +753,7 @@ function buildBar() {
   const btn = (attrs, inner) => `<button type="button" ${attrs}>${inner}</button>`;
   const swatches = CFG.palette.map((c, i) => btn(`data-color="${i}" title="${COLOR_NAMES[i]} (${i + 1})" aria-label="${COLOR_NAMES[i]}"`, `<span class="sw" style="background:${esc(c)}"></span>`));
   swatches.push(btn('data-color="6" title="Gradient (7)" aria-label="Gradient ink"', `<span class="sw" style="background:linear-gradient(135deg,${esc(CFG.gradient[0])},${esc(CFG.gradient[1])})"></span>`));
+  swatches.push(btn('data-color="7" data-picker title="Custom colour (8): click to choose" aria-label="Custom colour" aria-haspopup="true"', `<span class="sw custom" style="--c:${esc(CFG.customColor)}"></span>`));
   bar.innerHTML = [
     `<button type="button" class="grip only-overlay" data-grip title="Move toolbar">${I('<circle cx="9" cy="7" r="1"/><circle cx="15" cy="7" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="9" cy="17" r="1"/><circle cx="15" cy="17" r="1"/>')}</button>`,
     ...TOOLS.map((t) => btn(`data-tool="${t.id}" title="${t.label} (${t.key.toUpperCase()})" aria-label="${t.label}"`, t.icon)),
@@ -709,11 +764,12 @@ function buildBar() {
     btn('data-act="redo" title="Redo (⇧⌘Z)" aria-label="Redo"', I('<path d="M15 6l5 5-5 5"/><path d="M20 11H10a5 5 0 000 10h3"/>')),
     btn('data-act="clear" title="Clear all (X)" aria-label="Clear all"', I('<path d="M5 7h14M10 7V5h4v2M7 7l1 13h8l1-13"/>')),
     '<span class="sep"></span>',
-    btn('data-act="erase" title="Auto-erase (E)" aria-label="Auto-erase"', I('<path d="M3 12h4"/><path d="M10 12h3" opacity=".7"/><path d="M16 12h2" opacity=".45"/><path d="M21 12h.5" opacity=".25"/>')),
+    btn('data-act="erase" title="Auto-erase: fading ink (F)" aria-label="Auto-erase"', I('<path d="M3 12h4"/><path d="M10 12h3" opacity=".7"/><path d="M16 12h2" opacity=".45"/><path d="M21 12h.5" opacity=".25"/>')),
     btn('data-act="board" title="Whiteboard (B)" aria-label="Whiteboard"', I('<rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21l4-4 4 4"/>')),
     btn('data-act="hl" title="Highlight cursor (H)" aria-label="Highlight cursor"', I('<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="2.5"/>')),
     btn('data-act="spot" title="Spotlight (S)" aria-label="Spotlight"', I('<path d="M12 3v2M12 19v2M3 12h2M19 12h2"/><circle cx="12" cy="12" r="5"/>')),
     btn('data-act="zoom" title="Zoom lens (Z)" aria-label="Zoom lens"', I('<circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5L21 21M8 10.5h5M10.5 8v5"/>')),
+    btn('data-act="shot" class="only-overlay" title="Screenshot to the Desktop (C)" aria-label="Take screenshot"', I('<path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/>')),
     btn('data-act="help" title="Shortcuts (/)" aria-label="Show shortcuts"', I('<circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 015 0c0 1.7-2.5 2-2.5 4M12 17h.01"/>')),
     '<button type="button" class="done only-overlay" data-act="done" title="Stop drawing (Esc)">Done</button>',
   ].join('');
@@ -723,7 +779,8 @@ function syncBar() {
   if (!bar.firstChild) return;
   bar.querySelectorAll('[data-tool]').forEach((b) => b.setAttribute('aria-pressed', b.dataset.tool === S.tool));
   bar.querySelectorAll('[data-color]').forEach((b) => b.setAttribute('aria-pressed', +b.dataset.color === S.color));
-  bar.querySelectorAll('[data-width]').forEach((b) => b.setAttribute('aria-pressed', +b.dataset.width === S.width));
+  bar.querySelectorAll('[data-width]').forEach((b) => b.setAttribute('aria-pressed', +b.dataset.width === toolWidth()));
+  root.classList.toggle('erasing', S.tool === 'eraser');
   const set = (a, v) => { const b = bar.querySelector(`[data-act=${a}]`); if (b) b.setAttribute('aria-pressed', !!v); };
   set('erase', CFG.autoErase); set('board', S.board); set('hl', S.hl); set('spot', S.spot); set('zoom', S.zoom);
   const z = bar.querySelector('[data-act=zoom]'); if (z) z.hidden = S.mode !== 'overlay';
@@ -735,11 +792,26 @@ bar.addEventListener('click', (e) => {
   const b = e.target.closest('button');
   if (!b) return;
   if (b.dataset.tool) setTool(b.dataset.tool);
-  else if (b.dataset.color) setColor(+b.dataset.color);
+  else if (b.dataset.color) { setColor(+b.dataset.color); if (b.dataset.picker !== undefined) togglePicker(); else togglePicker(false); }
   else if (b.dataset.width) setWidth(+b.dataset.width);
   else ({ undo, redo, clear: clearAll, erase: toggleErase, board: () => toggleBoard(), hl: () => toggleFx('hl'), spot: () => toggleFx('spot'),
-    zoom: () => toggleFx('zoom'), help: toggleCheat, done: () => setDraw(false) })[b.dataset.act]?.();
+    zoom: () => toggleFx('zoom'), help: toggleCheat, shot: () => takeScreenshot(), done: () => setDraw(false) })[b.dataset.act]?.();
 });
+// Custom colour: an in-app palette, because the system colour panel would open behind the overlay.
+const pickerEl = $('#picker');
+function togglePicker(force) {
+  const show = force ?? pickerEl.hidden;
+  if (!show) { pickerEl.hidden = true; return; }
+  pickerEl.innerHTML = PICKER_COLORS.map((c) => `<button type="button" data-pick="${c}" title="${c}" aria-label="${c}" style="background:${c}"${c === CFG.customColor ? ' aria-pressed="true"' : ''}></button>`).join('');
+  pickerEl.hidden = false;
+  const sw = bar.querySelector('[data-picker]').getBoundingClientRect(), host = pickerEl.offsetParent?.getBoundingClientRect() || { left: 0, top: 0, height: innerHeight };
+  const below = sw.bottom + 8 + pickerEl.offsetHeight < host.top + host.height;
+  Object.assign(pickerEl.style, { left: Math.max(8, sw.left - host.left + sw.width / 2 - pickerEl.offsetWidth / 2) + 'px', top: (below ? sw.bottom - host.top + 8 : sw.top - host.top - 8 - pickerEl.offsetHeight) + 'px' });
+}
+function setCustomColor(c) { CFG.customColor = c; saveCfg(); buildBar(); setColor(7); bindRefresh(); }
+pickerEl.addEventListener('pointerdown', (e) => e.stopPropagation());
+pickerEl.addEventListener('click', (e) => { const b = e.target.closest('[data-pick]'); if (b) { setCustomColor(b.dataset.pick); togglePicker(false); } });
+document.addEventListener('pointerdown', (e) => { if (!pickerEl.hidden && !e.target.closest('#picker,[data-picker]')) togglePicker(false); }, true);
 bar.addEventListener('pointerdown', (e) => {
   if (!e.target.closest('[data-grip]')) return;
   e.preventDefault();
@@ -751,13 +823,14 @@ bar.addEventListener('pointerdown', (e) => {
 
 // ============================================================ keys while drawing
 const DRAW_KEYS = [
-  [['P', 'M', 'L', 'A'], 'Pen, highlighter, line, arrow'],
-  [['R', 'O', 'T'], 'Box, circle, text'],
-  [['1', '–', '7'], 'Colours (7 is gradient)'],
-  [['−', '='], 'Thinner or thicker'],
+  [['P', 'M', 'E'], 'Pen, highlighter, eraser'],
+  [['L', 'A', 'R', 'O', 'T'], 'Line, arrow, box, circle, text'],
+  [['1', '–', '8'], 'Colours (7 gradient, 8 your custom colour)'],
+  [['−', '='], 'Smaller or bigger (each tool keeps its own size)'],
   [['⇧ Shift'], 'Hold while dragging: straight angles, perfect squares and circles'],
   [['⌘ Command', 'Z'], 'Undo (add Shift to redo)'],
-  [['E', 'B'], 'Auto-erase, whiteboard'],
+  [['F', 'B'], 'Auto-erase (fading ink), whiteboard'],
+  [['C'], 'Screenshot with your ink, to the Desktop'],
   [['H', 'S', 'Z'], 'Highlight, spotlight, zoom'],
   [['X'], 'Clear all ink'],
   [['/'], 'Show these keys'],
@@ -776,15 +849,17 @@ $('#cheat').addEventListener('pointerdown', (e) => { e.stopPropagation(); toggle
 document.addEventListener('keydown', (e) => {
   if (recording || !canDraw() || e.target === note || e.target.closest?.('input,select,textarea')) return;
   const k = e.key.toLowerCase();
+  if (!pickerEl.hidden && k === 'escape') { e.preventDefault(); togglePicker(false); return; }
   if (!$('#cheat').hidden && k !== '/' && k !== '?') { toggleCheat(false); if (k === 'escape') { e.preventDefault(); return; } }
   if ((e.metaKey || e.ctrlKey) && k === 'z') { e.preventDefault(); (e.shiftKey ? redo : undo)(); return; }
   if (e.metaKey || e.ctrlKey || e.altKey) return;
   const tool = TOOLS.find((t) => t.key === k);
   if (tool) setTool(tool.id);
-  else if (k >= '1' && k <= '7') setColor(+k - 1);
-  else if (k === '-' || k === '_') setWidth(S.width - 1);
-  else if (k === '=' || k === '+') setWidth(S.width + 1);
-  else if (k === 'e') toggleErase();
+  else if (k >= '1' && k <= '8') setColor(+k - 1);
+  else if (k === '-' || k === '_') setWidth(toolWidth() - 1);
+  else if (k === '=' || k === '+') setWidth(toolWidth() + 1);
+  else if (k === 'f') toggleErase();
+  else if (k === 'c' && S.mode === 'overlay') takeScreenshot();
   else if (k === 'b') toggleBoard();
   else if (k === 'h') toggleFx('hl');
   else if (k === 's') toggleFx('spot');
@@ -822,9 +897,10 @@ for (const id of ['#mark', '#mark2']) $(id).getContext('2d').drawImage(drawMark(
 // ============================================================ shortcuts model
 const DEFAULT_KEYS = {
   annotate: 'Command+Shift+1', highlight: 'Command+Shift+2', spotlight: 'Command+Shift+7',
-  zoom: 'Command+Shift+8', annotateBare: 'Command+Shift+9', clear: 'Command+Shift+0', board: null, erase: null,
+  zoom: 'Command+Shift+8', annotateBare: 'Command+Shift+9', clear: 'Command+Shift+0', board: null, erase: null, shot: null,
 };
 const ACTIONS = {
+  shot: { label: 'Take screenshot', desc: 'Save the screen with your ink to the Desktop and copy it.', run: () => takeScreenshot() },
   annotate: { label: 'Annotate screen', desc: 'Start or stop drawing, with the toolbar.', run: () => toggleDraw(false) },
   annotateBare: { label: 'Annotate without controls', desc: 'Draw with the toolbar hidden. Keys still work.', run: () => toggleDraw(true) },
   highlight: { label: 'Highlight cursor', desc: 'Show or hide the halo around your pointer.', run: () => toggleFx('hl') },
@@ -1014,7 +1090,7 @@ async function coverDisplay() {
   track('cover', { display: d.id, area, bounds: winBounds });
 }
 
-function needsWindow() { return S.drawing || S.board || S.strokes.length > 0 || fxActive() || hudTimer !== 0; }
+function needsWindow() { return S.drawing || S.board || S.strokes.some((s) => s.tool !== 'eraser') || fxActive() || hudTimer !== 0 || !!S.capturing; }
 function updateVisibility() {
   if (S.mode !== 'overlay' || !D?.window) return;
   const want = needsWindow();
@@ -1078,6 +1154,7 @@ function setTray() {
       { type: 'separator' },
       { label: 'Auto-erase ink' + k('erase'), type: 'checkbox', checked: CFG.autoErase, click: toggleErase },
       { label: 'Clear ink' + k('clear'), enabled: S.strokes.length > 0, click: clearAll },
+      { label: 'Take screenshot' + k('shot'), enabled: S.mode === 'overlay', click: () => takeScreenshot() },
       { type: 'separator' },
       { label: 'Settings…', click: () => openSetup() },
       { label: STANDALONE ? 'Reload Overmark' : 'Reload Overmark (get updates)', click: async () => { track('reload'); await flush(); location.reload(); } },
@@ -1105,6 +1182,33 @@ function showUpdate(st) {
     updateShown = v; save('updateNotified', v);
     hud(`Overmark ${esc(v)} is available. Click the menu bar icon → Install update.`, 6000);
   }
+}
+// Screenshot of the display with the ink, without Overmark's own toolbar, notices or key sheet.
+// The downloadable app captures through its main process; the Claude app needs full access (as zoom does).
+async function takeScreenshot() {
+  if (S.mode !== 'overlay' || S.capturing) return;
+  commitText(); toggleCheat(false); togglePicker(false);
+  S.capturing = true; root.classList.add('capturing'); hudEl.classList.remove('on'); kick();
+  await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+  await sleep(80);
+  let res;
+  try {
+    if (D.screenshot?.take) res = await D.screenshot.take();
+    else if (fullAccess) {
+      const d = new Date(), z = (n) => String(n).padStart(2, '0');
+      const base = `${(await D.os.homedir()).replace(/\/$/, '')}/Desktop/Overmark ${d.getFullYear()}-${z(d.getMonth() + 1)}-${z(d.getDate())} at ${z(d.getHours())}.${z(d.getMinutes())}.${z(d.getSeconds())}`;
+      let f = base + '.png';
+      for (let n = 2; await D.fs.exists(f).catch(() => false); n++) f = `${base} (${n}).png`; // never overwrite a screenshot
+      const b = winBounds;
+      const r = await D.childProcess.exec(`/usr/sbin/screencapture -x -t png -R${b.x},${b.y},${b.width},${b.height} "${f}"`, { timeout: 15000 });
+      res = r.code === 0 ? { path: f } : { error: (r.stderr || 'exit ' + r.code).trim() };
+    } else res = { error: 'screenshots need the same permission as zoom. Turn on zoom in Settings → Spotlight & Zoom first' };
+  } catch (e) { res = { error: e.message }; }
+  S.capturing = false; root.classList.remove('capturing'); kick(); updateVisibility();
+  track('screenshot', { ok: !!res?.path });
+  if (res?.path) hud(`Screenshot saved to ${esc(res.path.split('/').slice(-2).join('/'))}${res.copied ? ' and copied to the clipboard' : ''}.`, 4000);
+  else hud('Screenshot failed: ' + esc(res?.error || 'unknown error'), 6000);
+  return res;
 }
 function welcomeKeys() {
   const parts = [['annotate', 'draw'], ['highlight', 'highlight'], ['spotlight', 'spotlight'], ['zoom', 'zoom'], ['clear', 'clear']]
@@ -1218,6 +1322,7 @@ function paneHTML() {
     <h2>Colours</h2><div class="group">
       ${row('Palette', 'The six colours on the toolbar (keys 1 to 6).', `<div class="pal">${CFG.palette.map((_, i) => color('palette.' + i)).join('')}</div>`)}
       ${row('Gradient ink', 'Key 7. Strokes blend from the first colour to the second.', `<div class="pal">${color('gradient.0')}${color('gradient.1')}</div>`)}
+      ${row('Custom colour', 'Key 8, or the last swatch on the toolbar, which also offers 24 quick colours.', color('customColor'))}
       ${row('Line weight', 'Scales thin, medium and thick together.', range('widthScale', 0.5, 2, 0.1))}
     </div>
     <h2>Auto-erase</h2><div class="group">
@@ -1308,7 +1413,7 @@ function bindControls(rootEl) {
 function bindRefresh() { if (S.mode === 'setup') rerenderControls(); }
 function rerenderControls() { $('#pane').querySelectorAll('[data-cfg]').forEach((el) => { const v = getPath(CFG, el.dataset.cfg); if (el.type === 'checkbox') el.checked = !!v; else el.value = v; }); }
 function onCfgChange(p) {
-  if (p.startsWith('palette') || p.startsWith('gradient')) buildBar();
+  if (p.startsWith('palette') || p.startsWith('gradient') || p === 'customColor') buildBar();
   if (p === 'toolbarPos') root.classList.toggle('tb-bottom', CFG.toolbarPos === 'bottom');
   redraw(); setTray();
 }

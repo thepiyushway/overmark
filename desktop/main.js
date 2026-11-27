@@ -4,7 +4,7 @@ const { app, BrowserWindow, ipcMain, screen, globalShortcut, Tray, Menu, nativeI
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
-const { exec } = require('child_process');
+const { exec, execFile } = require('child_process');
 const updater = require('./updater');
 
 if (!app.requestSingleInstanceLock()) app.quit();
@@ -59,6 +59,22 @@ const handlers = {
     setImmediate(() => rebuild(savedOptions));
     return { applied: 'now', reloading: true, options: savedOptions };
   },
+  // Screenshot of the overlay's display, ink included. Its own handler (not the page's exec) so the page can't choose
+  // the command or the path: always macOS screencapture, always a new file on the Desktop.
+  'screenshot.take': () => new Promise((resolve) => {
+    const b = win.getBounds(), d = new Date(), z = (n) => String(n).padStart(2, '0');
+    const dir = app.getPath('desktop');
+    const base = `Overmark ${d.getFullYear()}-${z(d.getMonth() + 1)}-${z(d.getDate())} at ${z(d.getHours())}.${z(d.getMinutes())}.${z(d.getSeconds())}`;
+    try { fs.mkdirSync(dir, { recursive: true }); } catch {}
+    let file = path.join(dir, base + '.png');
+    for (let n = 2; fs.existsSync(file); n++) file = path.join(dir, `${base} (${n}).png`); // two shots in one second never overwrite
+    execFile('/usr/sbin/screencapture', ['-x', '-t', 'png', `-R${b.x},${b.y},${b.width},${b.height}`, file], { timeout: 15000 }, (err, _out, stderr) => {
+      if (err || !fs.existsSync(file)) return resolve({ error: String(stderr || err?.message || 'capture failed').trim() });
+      let copied = false;
+      try { const img = nativeImage.createFromPath(file); if (!img.isEmpty()) { clipboard.writeImage(img); copied = true; } } catch {}
+      resolve({ path: file, copied });
+    });
+  }),
   'app.version': async () => app.getVersion(),
   'clipboard.writeText': async (t) => { clipboard.writeText(String(t).slice(0, 200000)); return true; },
   'updates.check': async () => updater.check(),

@@ -32,6 +32,8 @@ Quit from the menu bar icon → **Quit Overmark**. Closing the Settings window k
 | Draw with no toolbar | ⌘⇧9 |
 | Finish and keep ink | Esc, or the **Done** button |
 | Clear ink | ⌘⇧0, or X while drawing |
+| Erase part of your ink | E while drawing; − and = change its size |
+| Screenshot with your ink | C while drawing, the camera button, or the menu bar. Saved to the Desktop and copied |
 | Cursor highlight / spotlight / zoom | ⌘⇧2 / ⌘⇧7 / ⌘⇧8 |
 | Whiteboard | B while drawing, or menu bar → Whiteboard |
 | Every drawing key | / while drawing |

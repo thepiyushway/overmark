@@ -22,7 +22,7 @@ Overmark is a free, open-source alternative to paid screen-annotation apps such 
 ## Features
 
 ### Draw over anything
-Pen, highlighter, line, arrow, box, circle and text. Six colours you can change, plus **gradient ink**. Hold **Shift** for straight 45° lines and perfect squares and circles. Undo and redo. **Auto-erase** makes ink fade 1–15 s after you draw it. **Annotate without controls** hides the toolbar. Press **/** for an on-screen key sheet. **Esc** keeps your ink and hands the mouse and keyboard back to your apps (interactive mode).
+Pen, highlighter, **eraser**, line, arrow, box, circle and text. Six colours you can change, **gradient ink**, and a **custom colour** with 24 quick picks. Each tool keeps its own size, and a stylus draws thicker when you press harder. **Screenshots** save the screen with your ink to the Desktop. Hold **Shift** for straight 45° lines and perfect squares and circles. Undo and redo. **Auto-erase** makes ink fade 1–15 s after you draw it. **Annotate without controls** hides the toolbar. Press **/** for an on-screen key sheet. **Esc** keeps your ink and hands the mouse and keyboard back to your apps (interactive mode).
 
 <img src="docs/screenshots/overlay-shortcuts.png" width="49%" alt="On-screen drawing key sheet"> <img src="docs/screenshots/overlay-whiteboard.png" width="49%" alt="Whiteboard mode with a flow diagram">
 
@@ -48,9 +48,9 @@ Tabbed Settings (General, Annotate, Cursor, Spotlight & Zoom, Shortcuts, About) 
 | ⌘⇧7 | Spotlight |
 | ⌘⇧8 | Zoom lens |
 | ⌘⇧0 | Clear all ink |
-| (unset) | Whiteboard, auto-erase |
+| (unset) | Whiteboard, auto-erase, screenshot |
 
-While drawing: **P M L A R O T** pick pen, highlighter, line, arrow, box, circle and text · **1–7** pick a colour (7 is gradient) · **− =** change width · **⌘Z / ⇧⌘Z** undo and redo · **E** auto-erase · **B** whiteboard · **H S Z** highlight, spotlight and zoom · **X** clear · **/** keys · **Esc** done.
+While drawing: **P M E** pen, highlighter, eraser · **L A R O T** line, arrow, box, circle, text · **1–8** colours (7 gradient, 8 custom) · **− =** smaller or bigger · **⌘Z / ⇧⌘Z** undo and redo · **F** auto-erase · **B** whiteboard · **C** screenshot · **H S Z** highlight, spotlight and zoom · **X** clear · **/** keys · **Esc** done.
 
 **Not included:** click ripples. Neither a Claude app nor this standalone build listens to clicks in other apps, which would need Accessibility or Input Monitoring access.
 
@@ -79,7 +79,7 @@ One file, `index.html`, holds the whole app: the drawing engine, the overlay, se
 - **As a Claude app**, Claude's desktop app provides that API: transparent always-on-top windows, global shortcuts, a menu bar item, and child processes for zoom.
 - **As the standalone app**, [`desktop/preload.js`](desktop/preload.js) and [`desktop/main.js`](desktop/main.js) provide the same API with Electron.
 
-Design notes and the bugs found along the way are in **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**. Every push runs 102 automated end-to-end checks against the real app: a 33-step user flow and a 69-step test of every feature. A web smoke test runs too. Results are in **[docs/TESTING.md](docs/TESTING.md)**. `main` is where work happens; pushing to `release` ships an update to everyone: see **[docs/RELEASING.md](docs/RELEASING.md)**.
+Design notes and the bugs found along the way are in **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**. Every push runs 120 automated end-to-end checks against the real app: a 33-step user flow and an 87-step test of every feature. A web smoke test runs too. Results are in **[docs/TESTING.md](docs/TESTING.md)**. `main` is where work happens; pushing to `release` ships an update to everyone: see **[docs/RELEASING.md](docs/RELEASING.md)**.
 
 ## Privacy
 Overmark never reads what you type in other apps and sends nothing anywhere. It reads your pointer position only while a cursor effect is on. Zoom captures a small square around the pointer to a temporary file and shows it, then overwrites it. The Claude-app build writes a small diagnostics log (state and events, no content) to a private per-person record in its artifact database.

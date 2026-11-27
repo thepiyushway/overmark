@@ -63,6 +63,7 @@ const desktop = Object.freeze({
   },
   notification: { show: (o) => call('notification.show', o) },
   clipboard: { writeText: (t) => call('clipboard.writeText', t) },
+  screenshot: { take: () => call('screenshot.take') },
   tray: {
     set: async (opts) => { const gen = ++menuGeneration; pruneMenus(gen); trayClick = opts.click || null; return call('tray.set', { ...opts, click: undefined, menu: serializeMenu(opts.menu, gen) }); },
     remove: () => call('tray.remove'),

@@ -17,12 +17,12 @@ Full guide: [docs/SETUP.md](https://github.com/thepiyushway/overmark/blob/main/d
 Overmark checks GitHub twice a day. When a new version is out you see it in a notification, in Settings and on screen, and the menu bar icon shows **Install update**: it downloads the new version, checks it against `SHA256SUMS.txt`, replaces the app and reopens it. Check any time from the menu bar icon → **Check for updates…**, or Settings → About.
 
 ## Shortcuts
-⌘⇧1 annotate · ⌘⇧9 annotate without toolbar · ⌘⇧2 highlight cursor · ⌘⇧7 spotlight · ⌘⇧8 zoom · ⌘⇧0 clear · / while drawing shows every key.
+⌘⇧1 annotate · ⌘⇧9 annotate without toolbar · ⌘⇧2 highlight cursor · ⌘⇧7 spotlight · ⌘⇧8 zoom · ⌘⇧0 clear. While drawing: E eraser, C screenshot, 8 custom colour, / every key.
 
 ## How this build was checked
 These checks run automatically before the release is published:
 - The web-app smoke test (`tests/smoke_test.py`) passes.
-- The end-to-end tests of the standalone app pass: a 33-step user flow and a 69-step test of every feature, setting, tool, shortcut rule, menu item and update notice. See [docs/TESTING.md](https://github.com/thepiyushway/overmark/blob/main/docs/TESTING.md).
+- The end-to-end tests of the standalone app pass: a 33-step user flow and an 87-step test of every feature, setting, tool, shortcut rule, menu item and update notice. See [docs/TESTING.md](https://github.com/thepiyushway/overmark/blob/main/docs/TESTING.md).
 - Both apps have a valid code signature (Developer ID and notarized by Apple, when configured) and run from the menu bar only.
 - The Apple Silicon app launches and stays running.
 - The DMG images pass `hdiutil verify`.
