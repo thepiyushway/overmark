@@ -84,7 +84,7 @@ jobs:
         run: |
           awk -v v="## $VERSION" '$0 ~ "^## " { if (found) exit; if (index($0, v) == 1) { found = 1; next } } found' CHANGELOG.md > notes.md
           printf '\n---\n' >> notes.md
-          cat .github/release-notes.md >> notes.md
+          sed "s/<version>/$VERSION/g" .github/release-notes.md >> notes.md
           cat notes.md
       - name: Publish the GitHub Release
         uses: softprops/action-gh-release@v2
