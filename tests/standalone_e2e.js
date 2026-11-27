@@ -114,7 +114,8 @@ const launch = async () => { app = await H.launch(); return app; };
     const p = await page(); const a = await inkPixels();
     await p.keyboard.press('Escape');
     await waitFor(async () => !(await p.evaluate(() => document.documentElement.classList.contains('drawing'))), 'drawing off');
-    const w = await waitFor(async () => { const s = await winState(); return s.ignoring && s; }, 'click-through');
+    // Esc hides the window for a moment and re-shows it without focus (keyboard goes back to your app): wait for the end state.
+    const w = await waitFor(async () => { const s = await winState(); return s.ignoring && s.visible && s; }, 'click-through and visible');
     assert(w.visible, 'ink window hidden');
     assert(await inkPixels() === a, 'ink changed');
     assert(!(await toolbarShown()), 'toolbar still shown');

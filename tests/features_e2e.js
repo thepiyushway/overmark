@@ -5,7 +5,9 @@ const H = require('./lib/harness');
 const { section, step, assert, waitFor, sleep, page, hasClass, waitMode, winState, shortcut, isRegistered, menuItem, menuClick, menuLabels,
   drag, pixels, pixelAt, inkBox, canvasHash, toolbarShown, hudText, stored, openTab, setControl, captureAvailable, captures, resetCaptures, upd, fake, release, shot } = H;
 
-const DEFAULT_PALETTE = ['#ff3b30', '#ff9f0a', '#ffd60a', '#30d158', '#0a84ff', '#ffffff'];
+const DEFAULT_PALETTE = ['#ff3b30', '#ffd60a', '#0a84ff', '#30d158', '#ff9f0a', '#ffffff'];
+const DEFAULT_BAR_HIDDEN = ['color:4', 'color:5', 'color:6'];
+const DENY = '/tmp/overmark-capture-deny';
 const DEFAULT_KEYS = { annotate: 'Command+Shift+1', highlight: 'Command+Shift+2', spotlight: 'Command+Shift+7', zoom: 'Command+Shift+8', annotateBare: 'Command+Shift+9', clear: 'Command+Shift+0', board: null, erase: null, shot: null };
 const hex = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
 const near = (a, b, tol = 40) => a && b && a.every((v, i) => Math.abs(v - b[i]) <= tol);
@@ -578,10 +580,74 @@ async function penStroke(p, y, pressure) {
       await waitFor(async () => (await shots()).length === n0 + 1, 'shortcut screenshot', 8000);
       const k = await toSettings('keys'); await k.click('[data-do="resetkeys"]'); await sleep(200);
     });
+    await step('If macOS blocks capture, Overmark says what to allow and opens Screen Recording settings (once)', async () => {
+      const fs = require('fs'); fs.writeFileSync(DENY, '1');
+      await H.app().evaluate(({ shell }) => { global.__opened = []; shell.openExternal = async (u) => { global.__opened.push(u); }; });
+      try {
+        await toOverlay(); const p = await startDraw(); const n0 = (await shots()).length;
+        await p.keyboard.press('c');
+        const t = await waitFor(async () => { const t = await hudText(); return /Screenshots need Screen Recording/.test(t) && t; }, 'guidance', 8000);
+        assert(/Allow Overmark/.test(t), 'names the wrong app: ' + t);
+        const opened = await waitFor(async () => (await H.app().evaluate(() => global.__opened))[0], 'settings opened', 4000);
+        assert(/Privacy_ScreenCapture/.test(opened), 'opened ' + opened); assert((await shots()).length === n0, 'a file was written anyway');
+        await stopDraw(); await shortcut('Command+Shift+8');
+        await waitFor(async () => /Zoom needs Screen Recording/.test(await hudText()), 'zoom guidance', 8000);
+        await waitFor(async () => !(await menuItem('Zoom')).checked, 'zoom switched off');
+        assert((await H.app().evaluate(() => global.__opened)).length === 1, 'System Settings opened more than once');
+        return t.replace(/\s+/g, ' ');
+      } finally { fs.rmSync(DENY, { force: true }); }
+    });
     await step('The menu item is unavailable in the Settings window', async () => { await toSettings('general'); assert(!(await menuItem('Take screenshot')).enabled, 'enabled in Settings'); });
   } else {
     await step('Screenshot (skipped: no screencapture here; CI installs tests/fixtures/fake-screencapture.sh)', async () => 'skipped');
   }
+
+  // ==================================================================== Toolbar
+  section('Toolbar');
+  const visible = async (sel) => (await page()).$$eval(sel, (els) => els.filter((e) => e.offsetParent !== null).map((e) => e.dataset.color ?? e.dataset.tool ?? e.dataset.act ?? e.dataset.width));
+  await step('Default toolbar: red, yellow, blue and green, plus the colour picker', async () => {
+    await stopDraw(); await toSettings('general'); const p = await toOverlay(); await startDraw();
+    const cols = await visible('#bar [data-color]'); assert(JSON.stringify(cols) === JSON.stringify(['0', '1', '2', '3', '7']), 'visible colours ' + cols);
+    const bg = await p.$$eval('#bar [data-color] .sw', (els) => els.slice(0, 4).map((e) => getComputedStyle(e).backgroundColor));
+    assert(JSON.stringify(bg) === JSON.stringify(['rgb(255, 59, 48)', 'rgb(255, 214, 10)', 'rgb(10, 132, 255)', 'rgb(48, 209, 88)']), 'colours ' + bg);
+    await p.keyboard.press('5'); assert(await p.$eval('[data-color="4"]', (b) => b.getAttribute('aria-pressed')) === 'true', 'key 5 (hidden orange) still works');
+    await p.keyboard.press('1'); await stopDraw(); return 'red, yellow, blue, green + picker; orange/white/gradient by key';
+  });
+  await step('Settings → Toolbar lists every item with a switch, and a live preview', async () => {
+    const p = await toSettings('toolbar'); const n = (await p.$$('[data-bar]')).length;
+    assert(n === 29, n + ' switches'); assert(await p.$('#barPreview [data-tool="pen"]'), 'no preview');
+    assert(await p.$eval('[data-bar="color:6"]', (e) => !e.checked) && await p.$eval('[data-bar="tool:eraser"]', (e) => e.checked), 'default states');
+    return n + ' items: tools, colours, sizes, edit, modes and effects';
+  });
+  await step('Hiding items removes them from the toolbar and preview; their keys still work', async () => {
+    const p = await page();
+    for (const id of ['tool:eraser', 'act:zoom', 'act:help']) await p.click(`[data-bar="${id}"] + span`);
+    assert(await p.$eval('#barPreview [data-tool="eraser"]', (b) => b.hidden), 'preview still shows the eraser');
+    assert(JSON.stringify((await stored('barHidden')).sort()) === JSON.stringify([...DEFAULT_BAR_HIDDEN, 'tool:eraser', 'act:zoom', 'act:help'].sort()), 'not saved');
+    const q = await toOverlay(); await startDraw();
+    const tools = await visible('#bar [data-tool]'), acts = await visible('#bar [data-act]');
+    assert(!tools.includes('eraser') && !acts.includes('zoom') && !acts.includes('help'), `still visible: ${tools} ${acts}`);
+    await q.keyboard.press('p'); await drag(q, [[300, 300], [900, 300]]); const before = await pixels();
+    await q.keyboard.press('e'); await drag(q, [[600, 220], [600, 380]]); assert((await pixels()) < before, 'E (hidden eraser) did not erase');
+    await clearInk(); await q.keyboard.press('p'); await stopDraw(); return 'eraser, zoom and help hidden; E still erases';
+  });
+  await step('Showing a hidden item adds it back (gradient ink)', async () => {
+    const p = await toSettings('toolbar'); await p.click('[data-bar="color:6"] + span');
+    assert(!(await p.$eval('#barPreview [data-color="6"]', (b) => b.hidden)), 'preview');
+    await toOverlay(); await startDraw(); assert((await visible('#bar [data-color]')).includes('6'), 'gradient not on the toolbar'); await stopDraw();
+  });
+  await step('Separators appear only between groups that still show something', async () => {
+    const p = await toSettings('toolbar'); const seps = () => p.$$eval('#barPreview .sep', (s) => s.length); const before = await seps();
+    for (const id of ['act:undo', 'act:redo', 'act:clear']) await p.click(`[data-bar="${id}"] + span`);
+    const after = await seps(); assert(after === before - 1, `${before} → ${after}`);
+    for (const id of ['act:undo', 'act:redo', 'act:clear']) await p.click(`[data-bar="${id}"] + span`);
+    return `${before} → ${after} separators with Edit hidden`;
+  });
+  await step('Reset toolbar to the default', async () => {
+    const p = await page(); await p.click('[data-do="resetbar"]'); await sleep(200);
+    assert(JSON.stringify((await stored('barHidden')).sort()) === JSON.stringify([...DEFAULT_BAR_HIDDEN].sort()), 'stored ' + JSON.stringify(await stored('barHidden')));
+    assert(!(await p.$eval('#barPreview [data-tool="eraser"]', (b) => b.hidden)) && (await p.$eval('#barPreview [data-color="6"]', (b) => b.hidden)), 'preview not reset');
+  });
 
   // ==================================================================== Menu bar menu
   section('Menu bar menu');
@@ -645,6 +711,7 @@ async function penStroke(p, y, pressure) {
     const p = await toSettings('annotate'); await setControl('palette.2', '#123456');
     await openTab('cursor'); await setControl('hl.shape', 'squircle');
     await toSettings('keys'); await (await page()).click('[data-rec="spotlight"]'); await (await page()).keyboard.press('Meta+Shift+L'); await sleep(200);
+    const tb = await toSettings('toolbar'); await tb.click('[data-bar="act:board"] + span');
     await toOverlay(); const q = await startDraw(); await q.keyboard.press('a'); await q.keyboard.press('3'); await stopDraw();
     await menuClick('Quit Overmark'); await sleep(1500);
     await H.launch(); await waitMode('overlay'); await waitFor(() => isRegistered('Command+Shift+L'), 'shortcut after restart');
@@ -652,7 +719,8 @@ async function penStroke(p, y, pressure) {
     const r = await startDraw();
     assert(await r.$eval('[data-tool="arrow"]', (b) => b.getAttribute('aria-pressed')) === 'true', 'tool not kept');
     assert(await r.$eval('[data-color="2"]', (b) => b.getAttribute('aria-pressed')) === 'true', 'colour not kept');
-    await stopDraw(); return 'palette, highlight shape, ⌘⇧L, arrow tool, colour 3';
+    assert((await stored('barHidden')).includes('act:board') && await r.$eval('[data-act="board"]', (b) => b.hidden), 'toolbar choice not kept');
+    await stopDraw(); return 'palette, highlight shape, ⌘⇧L, arrow tool, colour 3, toolbar';
   });
 
   await H.quit();

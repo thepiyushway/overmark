@@ -133,6 +133,10 @@ footer{padding:28px 0 40px;color:var(--mute);font-size:13px}
 .overlay.tb-bottom .tb{top:auto;bottom:18px}
 .overlay:not(.drawing) .tb,.overlay:not(.drawing) #note,.overlay.bare .tb{display:none}
 .tb .only-overlay{display:none}.overlay .tb .only-overlay{display:grid}
+.tb [hidden],.overlay .tb [hidden]{display:none!important}
+.barprev{display:flex;justify-content:center;padding:18px;border-radius:14px;background:linear-gradient(135deg,#d9dde6,#eef0f4);margin-bottom:6px;overflow:auto}
+.tb.static{position:static;transform:none;padding:6px;border-radius:14px;max-width:none;flex-wrap:wrap}
+.swp{display:inline-block;width:14px;height:14px;border-radius:50%;vertical-align:-2px;margin-right:8px;box-shadow:inset 0 0 0 1px rgba(0,0,0,.2)}
 #hud{position:fixed;left:50%;bottom:44px;transform:translate(-50%,12px);z-index:9;display:none;align-items:center;gap:10px;max-width:min(92vw,760px);
   padding:12px 18px;border-radius:14px;background:rgba(18,18,20,.92);color:#fff;font:500 15px/1.35 "Schibsted Grotesk",system-ui,sans-serif;
   box-shadow:0 12px 34px rgba(0,0,0,.4);opacity:0;transition:opacity .25s,transform .25s;pointer-events:none}
@@ -304,7 +308,7 @@ const HOST = STANDALONE ? 'Overmark' : 'Claude'; // the app macOS asks about for
 
 // ============================================================ settings model
 const DEFAULT_CFG = {
-  palette: ['#ff3b30', '#ff9f0a', '#ffd60a', '#30d158', '#0a84ff', '#ffffff'],
+  palette: ['#ff3b30', '#ffd60a', '#0a84ff', '#30d158', '#ff9f0a', '#ffffff'], // red, yellow, blue, green on the toolbar; orange, white by key
   gradient: ['#ff2d95', '#ffb000'],
   widthScale: 1,
   autoErase: false, eraseAfter: 3,
@@ -327,7 +331,10 @@ function mergeDeep(base, over) {
   }
   return out;
 }
-let CFG = mergeDeep(DEFAULT_CFG, load('cfg', {}));
+const storedCfg = load('cfg', {});
+// Earlier versions ordered the default palette differently; move untouched defaults to the new order.
+if (JSON.stringify(storedCfg.palette) === JSON.stringify(['#ff3b30', '#ff9f0a', '#ffd60a', '#30d158', '#0a84ff', '#ffffff'])) delete storedCfg.palette;
+let CFG = mergeDeep(DEFAULT_CFG, storedCfg);
 const getPath = (o, p) => p.split('.').reduce((a, k) => a?.[k], o);
 const setPath = (o, p, v) => { const ks = p.split('.'); const last = ks.pop(); ks.reduce((a, k) => a[k], o)[last] = v; };
 let cfgSaveTimer = 0;
@@ -351,6 +358,17 @@ const TOOLS = [
   { id: 'text', key: 't', label: 'Text', icon: I('<path d="M6 6h12M12 6v13"/>') },
 ];
 const TWO_POINT = new Set(['line', 'arrow', 'rect', 'ellipse']);
+// The toolbar is customisable: every item can be shown or hidden (Settings → Toolbar). Hidden items keep their keys.
+const DEFAULT_BAR_HIDDEN = ['color:4', 'color:5', 'color:6'];
+let BAR_HIDDEN = new Set(load('barHidden', DEFAULT_BAR_HIDDEN));
+const barShows = (id) => !BAR_HIDDEN.has(id);
+const BAR_GROUPS = () => [
+  ['Tools', TOOLS.map((t) => ['tool:' + t.id, t.label, t.key.toUpperCase()])],
+  ['Colours', [...CFG.palette.map((c, i) => ['color:' + i, 'Colour ' + (i + 1), String(i + 1), c]), ['color:6', 'Gradient ink', '7', 'gradient'], ['color:7', 'Custom colour picker', '8', 'custom']]],
+  ['Line size', [['width:0', 'Thin', '−'], ['width:1', 'Medium', ''], ['width:2', 'Thick', '=']]],
+  ['Edit', [['act:undo', 'Undo', '⌘Z'], ['act:redo', 'Redo', '⇧⌘Z'], ['act:clear', 'Clear all', 'X']]],
+  ['Modes and effects', [['act:erase', 'Auto-erase (fading ink)', 'F'], ['act:board', 'Whiteboard', 'B'], ['act:hl', 'Highlight cursor', 'H'], ['act:spot', 'Spotlight', 'S'], ['act:zoom', 'Zoom lens', 'Z'], ['act:shot', 'Screenshot', 'C'], ['act:help', 'Shortcuts help', '/']]],
+];
 
 const S = {
   tool: load('tool', 'pen'), color: load('color', 0),
@@ -749,31 +767,44 @@ async function toggleFx(kind, force) {
 }
 
 // ============================================================ toolbar
+function barHTML() {
+  const btn = (id, attrs, inner) => `<button type="button" ${attrs}${barShows(id) ? '' : ' hidden'}>${inner}</button>`;
+  const groups = [
+    TOOLS.map((t) => [`tool:${t.id}`, btn(`tool:${t.id}`, `data-tool="${t.id}" title="${t.label} (${t.key.toUpperCase()})" aria-label="${t.label}"`, t.icon)]),
+    [...CFG.palette.map((c, i) => [`color:${i}`, btn(`color:${i}`, `data-color="${i}" title="${COLOR_NAMES[i]} (${i + 1})" aria-label="${COLOR_NAMES[i]}"`, `<span class="sw" style="background:${esc(c)}"></span>`)]),
+      ['color:6', btn('color:6', 'data-color="6" title="Gradient (7)" aria-label="Gradient ink"', `<span class="sw" style="background:linear-gradient(135deg,${esc(CFG.gradient[0])},${esc(CFG.gradient[1])})"></span>`)],
+      ['color:7', btn('color:7', 'data-color="7" data-picker title="Custom colour (8): click to choose" aria-label="Custom colour" aria-haspopup="true"', `<span class="sw custom" style="--c:${esc(CFG.customColor)}"></span>`)]],
+    WIDTHS.map((w, i) => [`width:${i}`, btn(`width:${i}`, `data-width="${i}" title="${['Thin', 'Medium', 'Thick'][i]}" aria-label="${['Thin', 'Medium', 'Thick'][i]} line"`, `<span class="dot" style="width:${4 + i * 4}px;height:${4 + i * 4}px"></span>`)]),
+    [['act:undo', btn('act:undo', 'data-act="undo" title="Undo (⌘Z)" aria-label="Undo"', I('<path d="M9 6L4 11l5 5"/><path d="M4 11h10a5 5 0 010 10h-3"/>'))],
+      ['act:redo', btn('act:redo', 'data-act="redo" title="Redo (⇧⌘Z)" aria-label="Redo"', I('<path d="M15 6l5 5-5 5"/><path d="M20 11H10a5 5 0 000 10h3"/>'))],
+      ['act:clear', btn('act:clear', 'data-act="clear" title="Clear all (X)" aria-label="Clear all"', I('<path d="M5 7h14M10 7V5h4v2M7 7l1 13h8l1-13"/>'))]],
+    [['act:erase', btn('act:erase', 'data-act="erase" title="Auto-erase: fading ink (F)" aria-label="Auto-erase"', I('<path d="M3 12h4"/><path d="M10 12h3" opacity=".7"/><path d="M16 12h2" opacity=".45"/><path d="M21 12h.5" opacity=".25"/>'))],
+      ['act:board', btn('act:board', 'data-act="board" title="Whiteboard (B)" aria-label="Whiteboard"', I('<rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21l4-4 4 4"/>'))],
+      ['act:hl', btn('act:hl', 'data-act="hl" title="Highlight cursor (H)" aria-label="Highlight cursor"', I('<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="2.5"/>'))],
+      ['act:spot', btn('act:spot', 'data-act="spot" title="Spotlight (S)" aria-label="Spotlight"', I('<path d="M12 3v2M12 19v2M3 12h2M19 12h2"/><circle cx="12" cy="12" r="5"/>'))],
+      ['act:zoom', btn('act:zoom', 'data-act="zoom" title="Zoom lens (Z)" aria-label="Zoom lens"', I('<circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5L21 21M8 10.5h5M10.5 8v5"/>'))],
+      ['act:shot', btn('act:shot', 'data-act="shot" class="only-overlay" title="Screenshot to the Desktop (C)" aria-label="Take screenshot"', I('<path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/>'))],
+      ['act:help', btn('act:help', 'data-act="help" title="Shortcuts (/)" aria-label="Show shortcuts"', I('<circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 015 0c0 1.7-2.5 2-2.5 4M12 17h.01"/>'))]],
+  ];
+  // A separator goes only between groups that still show something.
+  let out = `<button type="button" class="grip only-overlay" data-grip title="Move toolbar">${I('<circle cx="9" cy="7" r="1"/><circle cx="15" cy="7" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="9" cy="17" r="1"/><circle cx="15" cy="17" r="1"/>')}</button>`;
+  let shown = false;
+  for (const g of groups) {
+    const visible = g.some(([id]) => barShows(id));
+    if (visible && shown) out += '<span class="sep"></span>';
+    if (visible) shown = true;
+    out += g.map(([, html]) => html).join('');
+  }
+  return out + '<button type="button" class="done only-overlay" data-act="done" title="Stop drawing (Esc)">Done</button>';
+}
 function buildBar() {
-  const btn = (attrs, inner) => `<button type="button" ${attrs}>${inner}</button>`;
-  const swatches = CFG.palette.map((c, i) => btn(`data-color="${i}" title="${COLOR_NAMES[i]} (${i + 1})" aria-label="${COLOR_NAMES[i]}"`, `<span class="sw" style="background:${esc(c)}"></span>`));
-  swatches.push(btn('data-color="6" title="Gradient (7)" aria-label="Gradient ink"', `<span class="sw" style="background:linear-gradient(135deg,${esc(CFG.gradient[0])},${esc(CFG.gradient[1])})"></span>`));
-  swatches.push(btn('data-color="7" data-picker title="Custom colour (8): click to choose" aria-label="Custom colour" aria-haspopup="true"', `<span class="sw custom" style="--c:${esc(CFG.customColor)}"></span>`));
-  bar.innerHTML = [
-    `<button type="button" class="grip only-overlay" data-grip title="Move toolbar">${I('<circle cx="9" cy="7" r="1"/><circle cx="15" cy="7" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="9" cy="17" r="1"/><circle cx="15" cy="17" r="1"/>')}</button>`,
-    ...TOOLS.map((t) => btn(`data-tool="${t.id}" title="${t.label} (${t.key.toUpperCase()})" aria-label="${t.label}"`, t.icon)),
-    '<span class="sep"></span>', ...swatches, '<span class="sep"></span>',
-    ...WIDTHS.map((w, i) => btn(`data-width="${i}" title="${['Thin', 'Medium', 'Thick'][i]}" aria-label="${['Thin', 'Medium', 'Thick'][i]} line"`, `<span class="dot" style="width:${4 + i * 4}px;height:${4 + i * 4}px"></span>`)),
-    '<span class="sep"></span>',
-    btn('data-act="undo" title="Undo (⌘Z)" aria-label="Undo"', I('<path d="M9 6L4 11l5 5"/><path d="M4 11h10a5 5 0 010 10h-3"/>')),
-    btn('data-act="redo" title="Redo (⇧⌘Z)" aria-label="Redo"', I('<path d="M15 6l5 5-5 5"/><path d="M20 11H10a5 5 0 000 10h3"/>')),
-    btn('data-act="clear" title="Clear all (X)" aria-label="Clear all"', I('<path d="M5 7h14M10 7V5h4v2M7 7l1 13h8l1-13"/>')),
-    '<span class="sep"></span>',
-    btn('data-act="erase" title="Auto-erase: fading ink (F)" aria-label="Auto-erase"', I('<path d="M3 12h4"/><path d="M10 12h3" opacity=".7"/><path d="M16 12h2" opacity=".45"/><path d="M21 12h.5" opacity=".25"/>')),
-    btn('data-act="board" title="Whiteboard (B)" aria-label="Whiteboard"', I('<rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21l4-4 4 4"/>')),
-    btn('data-act="hl" title="Highlight cursor (H)" aria-label="Highlight cursor"', I('<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="2.5"/>')),
-    btn('data-act="spot" title="Spotlight (S)" aria-label="Spotlight"', I('<path d="M12 3v2M12 19v2M3 12h2M19 12h2"/><circle cx="12" cy="12" r="5"/>')),
-    btn('data-act="zoom" title="Zoom lens (Z)" aria-label="Zoom lens"', I('<circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5L21 21M8 10.5h5M10.5 8v5"/>')),
-    btn('data-act="shot" class="only-overlay" title="Screenshot to the Desktop (C)" aria-label="Take screenshot"', I('<path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/>')),
-    btn('data-act="help" title="Shortcuts (/)" aria-label="Show shortcuts"', I('<circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 015 0c0 1.7-2.5 2-2.5 4M12 17h.01"/>')),
-    '<button type="button" class="done only-overlay" data-act="done" title="Stop drawing (Esc)">Done</button>',
-  ].join('');
+  bar.innerHTML = barHTML();
   syncBar();
+}
+function setBarItem(id, show) {
+  if (show) BAR_HIDDEN.delete(id); else BAR_HIDDEN.add(id);
+  save('barHidden', [...BAR_HIDDEN]); buildBar();
+  const pv = $('#barPreview'); if (pv) pv.innerHTML = barHTML();
 }
 function syncBar() {
   if (!bar.firstChild) return;
@@ -783,7 +814,7 @@ function syncBar() {
   root.classList.toggle('erasing', S.tool === 'eraser');
   const set = (a, v) => { const b = bar.querySelector(`[data-act=${a}]`); if (b) b.setAttribute('aria-pressed', !!v); };
   set('erase', CFG.autoErase); set('board', S.board); set('hl', S.hl); set('spot', S.spot); set('zoom', S.zoom);
-  const z = bar.querySelector('[data-act=zoom]'); if (z) z.hidden = S.mode !== 'overlay';
+  const z = bar.querySelector('[data-act=zoom]'); if (z) z.hidden = S.mode !== 'overlay' || !barShows('act:zoom');
   bar.querySelector('[data-act=undo]').disabled = !S.strokes.length && !S.cleared;
   bar.querySelector('[data-act=redo]').disabled = !S.redo.length;
   bar.querySelector('[data-act=clear]').disabled = !S.strokes.length;
@@ -985,7 +1016,7 @@ function logErr(where, e) {
 }
 // Remote diagnostics: the latest state and recent events go to this artifact's own database,
 // in a per-person private doc, so problems can be read back and fixed. No keystrokes or text.
-const VERSION = '4.9';
+const VERSION = '5.0';
 let DB = null, diagPath = null, events = [], logDirty = false, writing = false, flushTimer = 0;
 function track(ev, data) {
   events.push({ t: new Date().toISOString().slice(11, 23), ev, ...(data || {}) });
@@ -1055,6 +1086,7 @@ async function zoomLoop() {
       if (r.code !== 0) {
         logErr('zoom', r.stderr || ('exit ' + r.code));
         // 126/127: the capture command can't run at all, so retrying won't help.
+        if (CAPTURE_DENIED.test(r.stderr || '')) { captureHelp('Zoom needs'); break; }
         if (r.code === 126 || r.code === 127 || ++fails > 3) { hud(`Zoom couldn't capture the screen. Allow ${HOST} in System Settings → Privacy & Security → Screen Recording.`, 7000); break; }
         await sleep(400); continue;
       }
@@ -1183,6 +1215,18 @@ function showUpdate(st) {
     hud(`Overmark ${esc(v)} is available. Click the menu bar icon → Install update.`, 6000);
   }
 }
+// macOS refuses a capture with "could not create image…" when the app running screencapture
+// (Overmark, or Claude for the Claude app) isn't allowed under Screen Recording.
+const CAPTURE_DENIED = /could not create image|not (?:authori[sz]ed|permitted)|screen recording/i;
+let captureHelpOpened = false;
+function captureHelp(what) {
+  hud(`${what} Screen Recording. Allow <b>${HOST}</b> in System Settings → Privacy &amp; Security → Screen Recording, then quit and reopen ${HOST}.`, 10000);
+  track('captureDenied', { what });
+  if (captureHelpOpened) return;
+  captureHelpOpened = true; // open the right System Settings page once per session
+  if (STANDALONE) D.permissions.manage().catch(() => {});
+  else if (fullAccess) D.childProcess.exec('open "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture"', { timeout: 8000 }).catch(() => {});
+}
 // Screenshot of the display with the ink, without Overmark's own toolbar, notices or key sheet.
 // The downloadable app captures through its main process; the Claude app needs full access (as zoom does).
 async function takeScreenshot() {
@@ -1207,6 +1251,7 @@ async function takeScreenshot() {
   S.capturing = false; root.classList.remove('capturing'); kick(); updateVisibility();
   track('screenshot', { ok: !!res?.path });
   if (res?.path) hud(`Screenshot saved to ${esc(res.path.split('/').slice(-2).join('/'))}${res.copied ? ' and copied to the clipboard' : ''}.`, 4000);
+  else if (CAPTURE_DENIED.test(res?.error || '')) captureHelp('Screenshots need');
   else hud('Screenshot failed: ' + esc(res?.error || 'unknown error'), 6000);
   return res;
 }
@@ -1280,6 +1325,7 @@ async function enterOverlay() {
 const TABS = [
   ['general', 'General', '<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/>'],
   ['annotate', 'Annotate', '<path d="M4 20l4-1L19 8l-3-3L5 16z"/>'],
+  ['toolbar', 'Toolbar', '<rect x="3" y="8" width="18" height="8" rx="4"/><path d="M7 12h.01M11 12h.01M15 12h2"/>'],
   ['cursor', 'Cursor', '<path d="M5 3l14 8-6 2-2 6z"/>'],
   ['spot', 'Spotlight & Zoom', '<circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5L21 21"/>'],
   ['keys', 'Shortcuts', '<rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7 14h10"/>'],
@@ -1332,6 +1378,17 @@ function paneHTML() {
     <h2>Whiteboard</h2><div class="group">
       ${row('Board style', 'Press B while drawing, or use the menu bar. The board keeps its own ink.', select('board', [['white', 'White'], ['grid', 'White with dots'], ['dark', 'Dark with dots']]))}
     </div>`;
+  if (tab === 'toolbar') {
+    const sw = (c) => (c === 'gradient' ? `<span class="swp" style="background:linear-gradient(135deg,${esc(CFG.gradient[0])},${esc(CFG.gradient[1])})"></span>`
+      : c === 'custom' ? `<span class="swp" style="background:conic-gradient(#ff3b30,#ffd60a,#30d158,#0a84ff,#bf5af2,#ff3b30)"></span>` : c ? `<span class="swp" style="background:${esc(c)}"></span>` : '');
+    return `
+    <h2>Your toolbar</h2>
+    <div class="barprev"><div class="tb static" id="barPreview">${barHTML()}</div></div>
+    <p class="hint">Show only what you use. Hidden items still work from the keyboard.</p>
+    ${BAR_GROUPS().map(([title, items]) => `<h2>${title}</h2><div class="group">${items.map(([id, label, key, c]) =>
+      row(`${sw(c)}${esc(label)}`, key ? `Key: ${esc(key)}` : '', `<label class="swt"><input type="checkbox" data-bar="${id}"${barShows(id) ? ' checked' : ''} aria-label="Show ${esc(label)}"><span></span></label>`)).join('')}</div>`).join('')}
+    <button class="link" type="button" data-do="resetbar">Reset toolbar to the default</button>`;
+  }
   if (tab === 'cursor') return `
     <h2>Highlight</h2><div class="group">
       ${row('Shape', '', select('hl.shape', [['circle', 'Circle'], ['ring', 'Ring'], ['squircle', 'Squircle'], ['rhombus', 'Rhombus']]))}
@@ -1397,6 +1454,7 @@ function renderPane() {
 }
 $('#tabs').addEventListener('click', (e) => { const b = e.target.closest('[data-tab]'); if (!b) return; tab = b.dataset.tab; save('tab', tab); recording = null; renderPane(); });
 function bindControls(rootEl) {
+  rootEl.querySelectorAll('[data-bar]').forEach((el) => el.addEventListener('change', () => setBarItem(el.dataset.bar, el.checked)));
   rootEl.querySelectorAll('[data-cfg]').forEach((el) => {
     const p = el.dataset.cfg, v = getPath(CFG, p);
     if (el.type === 'checkbox') el.checked = !!v; else el.value = v;
@@ -1466,8 +1524,9 @@ document.addEventListener('click', async (e) => {
     else say('Couldn\'t check for updates: ' + esc(st.error || 'try again later') + '.');
     return;
   }
+  if (act === 'resetbar') { BAR_HIDDEN = new Set(DEFAULT_BAR_HIDDEN); save('barHidden', DEFAULT_BAR_HIDDEN); buildBar(); renderPane(); }
   if (act === 'resetkeys') { KEYS = { ...DEFAULT_KEYS }; save('keys2', KEYS); renderPane(); wireSystem(); }
-  if (act === 'resetall') { CFG = mergeDeep(DEFAULT_CFG, {}); save('cfg', CFG); KEYS = { ...DEFAULT_KEYS }; save('keys2', KEYS); buildBar(); renderPane(); wireSystem(); say('Settings reset.'); }
+  if (act === 'resetall') { CFG = mergeDeep(DEFAULT_CFG, {}); save('cfg', CFG); BAR_HIDDEN = new Set(DEFAULT_BAR_HIDDEN); save('barHidden', DEFAULT_BAR_HIDDEN); KEYS = { ...DEFAULT_KEYS }; save('keys2', KEYS); buildBar(); renderPane(); wireSystem(); say('Settings reset.'); }
   if (act === 'zoomperm') {
     const r = await D.permissions.request(['full-access']).catch((er) => { say(er.message); return null; });
     if (r) PERMS = { ...PERMS, ...r };

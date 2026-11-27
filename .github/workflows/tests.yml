@@ -36,6 +36,6 @@ jobs:
       - name: Standalone app, user flow (33 steps)
         working-directory: desktop
         run: xvfb-run -a -s "-screen 0 1440x900x24" npm run test:flow
-      - name: Standalone app, every feature (87 steps)
+      - name: Standalone app, every feature (94 steps)
         working-directory: desktop
         run: xvfb-run -a -s "-screen 0 1440x900x24" npm run test:features

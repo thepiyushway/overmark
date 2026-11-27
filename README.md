@@ -1,88 +1,98 @@
 <p align="center"><img src="desktop/build/icon.png" width="112" alt="Overmark icon"></p>
 <h1 align="center">Overmark</h1>
-<p align="center"><b>Draw on anything on your screen.</b> Annotate, highlight and spotlight your cursor, and zoom, over any app on your Mac.<br>
+<p align="center"><b>Draw on anything on your screen.</b><br>
+Annotate, erase, highlight and spotlight your cursor, zoom and take screenshots, over any app on your Mac.<br>
 Free and open source. Built with Claude by <a href="https://github.com/thepiyushway">@thepiyushway</a>.</p>
 
-<p align="center"><img src="docs/screenshots/overlay-annotate.png" width="860" alt="Overmark drawing over a slide: a circle, a gradient arrow and text, a highlight and a box"></p>
+<p align="center">
+  <a href="https://github.com/thepiyushway/overmark/releases"><img alt="Download" src="https://img.shields.io/github/v/release/thepiyushway/overmark?include_prereleases&label=download&color=ff3b30"></a>
+  <a href="https://github.com/thepiyushway/overmark/actions/workflows/tests.yml"><img alt="Tests" src="https://github.com/thepiyushway/overmark/actions/workflows/tests.yml/badge.svg"></a>
+  <img alt="macOS 12+" src="https://img.shields.io/badge/macOS-12%2B-111">
+  <a href="LICENSE"><img alt="MIT licence" src="https://img.shields.io/badge/licence-MIT-0a84ff"></a>
+</p>
 
-Overmark is a free, open-source alternative to paid screen-annotation apps such as Presentify ($14.99 on the Mac App Store). It started as an experiment: can a **Claude app**, an artifact installed from Claude as a Mac app, replace a paid utility? It can. The same single `index.html` also ships as a standalone Mac app.
+<p align="center"><img src="docs/screenshots/overlay-annotate.png" width="900" alt="Overmark drawing over a slide: a circle, a gradient arrow, text, a highlight and a box"></p>
 
-## Two ways to run it
+Overmark is a free alternative to paid screen-annotation apps such as Presentify ($14.99 on the Mac App Store) and Epic Pen. Press **⌘⇧1** in any app and draw: circle the number that matters, point an arrow at the bug, highlight the line you're explaining. Press **Esc**, and your ink stays on screen while you carry on working.
 
-| | **Claude app** | **Standalone Mac app (DMG)** |
-|---|---|---|
-| Install | Open the shared Overmark artifact in the Claude desktop app → **Install as Mac app** | **[Download the DMG](https://github.com/thepiyushway/overmark/releases)**, or build it yourself (below) |
-| Needs | Claude desktop app, signed in | macOS 12+ |
-| Zoom lens | Yes, for your own Claude organization (it needs Claude's full-access permission) | Yes |
-| Menu bar only, no Dock icon | Dock icon stays while it runs | Yes |
-| Updates | Automatic when the Claude app is republished | Built-in updater: notifies you and installs from the menu bar |
-| Needs Claude? | Yes | **No**: works for anyone, offline, no account |
-| Diagnostics | Writes a private log to the artifact's database, readable by you and Claude | Off |
+It started as an experiment to see whether a **Claude app**, built and installed from Claude, could replace a paid utility. The same single `index.html` now also ships as a normal downloadable Mac app that anyone can use, with no Claude account needed.
 
-## Features
+## Download
 
-### Draw over anything
-Pen, highlighter, **eraser**, line, arrow, box, circle and text. Six colours you can change, **gradient ink**, and a **custom colour** with 24 quick picks. Each tool keeps its own size, and a stylus draws thicker when you press harder. **Screenshots** save the screen with your ink to the Desktop. Hold **Shift** for straight 45° lines and perfect squares and circles. Undo and redo. **Auto-erase** makes ink fade 1–15 s after you draw it. **Annotate without controls** hides the toolbar. Press **/** for an on-screen key sheet. **Esc** keeps your ink and hands the mouse and keyboard back to your apps (interactive mode).
+**[⬇ Download the latest release](https://github.com/thepiyushway/overmark/releases)**: `Overmark-<version>-arm64.dmg` for Apple Silicon (M1 and later), or `-x64.dmg` for Intel.
 
-<img src="docs/screenshots/overlay-shortcuts.png" width="49%" alt="On-screen drawing key sheet"> <img src="docs/screenshots/overlay-whiteboard.png" width="49%" alt="Whiteboard mode with a flow diagram">
+Open the DMG, drag Overmark to Applications, and open it. Until releases are notarized by Apple, macOS asks you once to allow it: System Settings → Privacy & Security → **Open Anyway**. Step-by-step instructions are in [docs/SETUP.md](docs/SETUP.md).
 
-**Whiteboard:** switch to a blank white, dotted or dark board with its own ink, and come back to your screen ink untouched.
+Overmark updates itself. When a new version is out, you'll see it in a notification, in Settings and on screen, and you install it from the menu bar.
 
-### Cursor highlight, spotlight and zoom
-<img src="docs/screenshots/overlay-highlight.png" width="32%" alt="Pink squircle cursor highlight"> <img src="docs/screenshots/overlay-spotlight.png" width="32%" alt="Spotlight dimming everything except the chart peak"> <img src="docs/screenshots/overlay-zoom.png" width="32%" alt="Zoom lens magnifying code">
+## What it does
 
-- **Highlight:** circle, ring, squircle or rhombus. Choose the colour, opacity, size, border (solid, dashed, dotted or none), glow, and a pulse or breathe animation. It can hide itself when the pointer stops.
-- **Spotlight:** dims everything except around the pointer. Circle, rounded rectangle or squircle, with size, dim strength and a soft edge.
-- **Zoom lens:** follows the pointer and sits just beside it so it never magnifies itself. Magnification 1.5–5×, adjustable size and shape. It refreshes about 6–10 times a second using macOS's own `screencapture`.
-
-### Settings, shortcuts and menu bar
-<img src="docs/screenshots/settings-cursor.png" width="49%" alt="Cursor settings with live preview"> <img src="docs/screenshots/settings-keys.png" width="49%" alt="Shortcut settings">
-
-Tabbed Settings (General, Annotate, Cursor, Spotlight & Zoom, Shortcuts, About) with live previews. Every action has a global shortcut you can change or clear, and they work with Stream Deck's Hotkey action. The menu bar menu has every mode.
-
-| Default shortcut | Action |
+### Draw, erase, write
+| | |
 |---|---|
-| ⌘⇧1 | Annotate screen |
-| ⌘⇧9 | Annotate without controls |
-| ⌘⇧2 | Highlight cursor |
-| ⌘⇧7 | Spotlight |
-| ⌘⇧8 | Zoom lens |
+| <img src="docs/screenshots/overlay-eraser.png" alt="The eraser rubbing out part of a line, with its size ring"> | **Pen, highlighter, eraser, line, arrow, box, circle and text.** Hold Shift for straight 45° lines and perfect squares and circles.<br><br>**Eraser (E):** rub out just part of your ink in three sizes. A ring shows what it will remove.<br><br>Undo and redo with ⌘Z and ⇧⌘Z. Undo even brings back ink you cleared by mistake.<br><br>**Each tool keeps its own size**, and a stylus draws thicker when you press harder. |
+| <img src="docs/screenshots/overlay-picker.png" alt="The colour picker with 24 quick colours"> | **Colours:** red, yellow, blue and green on the toolbar, plus a **colour picker** with 24 quick colours. Any shade, gradient ink, orange and white are available from Settings and by key.<br><br>**Auto-erase (F)** fades ink after 1–15 seconds, so you can keep presenting. **Screenshot (C)** saves the screen with your ink to the Desktop and copies it. |
+
+### Point at things
+<img src="docs/screenshots/overlay-highlight.png" width="32%" alt="Pink squircle cursor highlight"> <img src="docs/screenshots/overlay-spotlight.png" width="32%" alt="Spotlight dimming everything except the chart"> <img src="docs/screenshots/overlay-zoom.png" width="32%" alt="Zoom lens magnifying code">
+
+- **Highlight** your cursor: a circle, ring, squircle or rhombus, with colour, opacity, size, border, glow and pulse.
+- **Spotlight:** dim everything except around the pointer.
+- **Zoom lens:** magnify what's under the pointer, 1.5–5×.
+
+### Explain on a blank page
+<img src="docs/screenshots/overlay-whiteboard.png" width="49%" alt="Whiteboard with a flow diagram"> <img src="docs/screenshots/overlay-shortcuts.png" width="49%" alt="The on-screen key sheet">
+
+**Whiteboard (B):** a white, dotted or dark board with its own ink, separate from your screen ink. **/** shows every key while you draw.
+
+### Make it yours
+<img src="docs/screenshots/settings-toolbar.png" width="49%" alt="Settings → Toolbar with a live preview and a switch for every item"> <img src="docs/screenshots/settings-keys.png" width="49%" alt="Settings → Shortcuts">
+
+- **Toolbar:** show only what you use. Every tool, colour, size and button can be switched on or off, with a live preview, and hidden items still work from the keyboard.
+- **Shortcuts:** change any global shortcut. They work with Stream Deck's Hotkey action.
+- **Settings** has live previews for the cursor effects, and everything is saved.
+
+## Shortcuts
+| Anywhere | |
+|---|---|
+| ⌘⇧1 | Start or stop drawing |
+| ⌘⇧9 | Draw with the toolbar hidden |
+| ⌘⇧2 · ⌘⇧7 · ⌘⇧8 | Highlight cursor · Spotlight · Zoom |
 | ⌘⇧0 | Clear all ink |
-| (unset) | Whiteboard, auto-erase, screenshot |
+| (set your own) | Whiteboard, auto-erase, screenshot |
 
-While drawing: **P M E** pen, highlighter, eraser · **L A R O T** line, arrow, box, circle, text · **1–8** colours (7 gradient, 8 custom) · **− =** smaller or bigger · **⌘Z / ⇧⌘Z** undo and redo · **F** auto-erase · **B** whiteboard · **C** screenshot · **H S Z** highlight, spotlight and zoom · **X** clear · **/** keys · **Esc** done.
+**While drawing:**
+- **P M E** pen, highlighter, eraser · **L A R O T** line, arrow, box, circle, text
+- **1–8** colours (5 orange, 6 white, 7 gradient, 8 custom) · **− =** smaller or bigger
+- **⌘Z / ⇧⌘Z** undo and redo · **F** auto-erase · **B** whiteboard · **C** screenshot · **H S Z** highlight, spotlight, zoom · **X** clear
+- **/** shows every key · **Esc** finishes and hands the mouse back to your app
 
-**Not included:** click ripples. Neither a Claude app nor this standalone build listens to clicks in other apps, which would need Accessibility or Input Monitoring access.
+## Two editions, one codebase
+| | **Mac app (download)** | **Claude app** |
+|---|---|---|
+| Who it's for | Anyone | People using the Claude desktop app |
+| Install | DMG from [Releases](https://github.com/thepiyushway/overmark/releases) | Open the Overmark artifact in Claude → **Install as Mac app** |
+| Needs | macOS 12+. Works offline, no account | Claude desktop app, signed in |
+| Updates | Built-in updater, with checksum and signature checks | Automatic when the artifact is republished |
+| Zoom and screenshots | Allow **Overmark** under Screen Recording | Allow **Claude** under Screen Recording |
 
-## Install
-
-See **[docs/SETUP.md](docs/SETUP.md)** for step-by-step setup, permissions and troubleshooting.
-
-### Build the DMG yourself
-On a Mac with Node 18+:
+## Build it yourself
 ```bash
 git clone https://github.com/thepiyushway/overmark.git
 cd overmark/desktop
 npm install
-npm test            # end-to-end tests of the app (user flow + every feature)
-npm run dist        # → desktop/dist/Overmark-<version>-arm64.dmg and -x64.dmg
+npm start         # run it
+npm test          # end-to-end tests of the real app (user flow + every feature)
+npm run dist      # → desktop/dist/Overmark-<version>-arm64.dmg and -x64.dmg
 ```
-With no Developer ID, builds are ad-hoc signed, and the first open needs System Settings → Privacy & Security → **Open Anyway**. Releases are signed with a Developer ID and notarized by Apple once the repo's signing secrets are set, and then open like any other app. See **[docs/SIGNING.md](docs/SIGNING.md)**.
 
-Run without packaging: `npm start`.
+## Quality
+Every push runs **127 automated end-to-end checks against the real app**: a 33-step user flow and a 94-step test of every feature. A web smoke test runs too. Releases are built and checked on macOS before they're published. Results, and the bugs the tests caught, are in **[docs/TESTING.md](docs/TESTING.md)**.
 
-## Updates (downloadable app)
-Overmark checks GitHub Releases on launch and twice a day. When a new version is out you get a notification and **Install update** in the menu bar menu. It downloads the new version, checks it against the release's `SHA256SUMS.txt`, its code signature and its app ID, swaps it in and reopens. Check any time from the menu bar → **Check for updates…** or Settings → About. To publish one, see [docs/RELEASING.md](docs/RELEASING.md).
-
-## How it works
-One file, `index.html`, holds the whole app: the drawing engine, the overlay, settings and shortcuts. It talks to the operating system only through `claude.use("desktop")`:
-- **As a Claude app**, Claude's desktop app provides that API: transparent always-on-top windows, global shortcuts, a menu bar item, and child processes for zoom.
-- **As the standalone app**, [`desktop/preload.js`](desktop/preload.js) and [`desktop/main.js`](desktop/main.js) provide the same API with Electron.
-
-Design notes and the bugs found along the way are in **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**. Every push runs 120 automated end-to-end checks against the real app: a 33-step user flow and an 87-step test of every feature. A web smoke test runs too. Results are in **[docs/TESTING.md](docs/TESTING.md)**. `main` is where work happens; pushing to `release` ships an update to everyone: see **[docs/RELEASING.md](docs/RELEASING.md)**.
+`main` is where work happens; pushing to `release` ships an update to everyone ([docs/RELEASING.md](docs/RELEASING.md)). Signing and notarization are ready to switch on ([docs/SIGNING.md](docs/SIGNING.md)). Design notes are in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## Privacy
-Overmark never reads what you type in other apps and sends nothing anywhere. It reads your pointer position only while a cursor effect is on. Zoom captures a small square around the pointer to a temporary file and shows it, then overwrites it. The Claude-app build writes a small diagnostics log (state and events, no content) to a private per-person record in its artifact database.
+Overmark sends nothing anywhere and needs no account. It reads your pointer position only while a cursor effect is on. Zoom and screenshots use macOS's own `screencapture`: zoom copies a small square around the pointer to a temporary file, and screenshots go to your Desktop. The Claude-app edition keeps a small private diagnostics log (state and events, never what you draw) in its artifact database. The downloadable app keeps none.
 
-## License
-[MIT](LICENSE) © 2026 thepiyushway
+## Credits
+Built by [@thepiyushway](https://github.com/thepiyushway) with Claude. Font: Schibsted Grotesk (SIL Open Font Licence). [MIT licence](LICENSE).

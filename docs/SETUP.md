@@ -37,6 +37,7 @@ Quit from the menu bar icon → **Quit Overmark**. Closing the Settings window k
 | Cursor highlight / spotlight / zoom | ⌘⇧2 / ⌘⇧7 / ⌘⇧8 |
 | Whiteboard | B while drawing, or menu bar → Whiteboard |
 | Every drawing key | / while drawing |
+| Choose what the toolbar shows | Settings → Toolbar (hidden items still work by key) |
 | Change any shortcut | Settings → Shortcuts → Change (two modifier keys plus a letter or number) |
 
 ## Troubleshooting
@@ -44,7 +45,7 @@ Quit from the menu bar icon → **Quit Overmark**. Closing the Settings window k
 | Symptom | Fix |
 |---|---|
 | A shortcut does nothing | Another app may use it: Settings → Shortcuts shows a red note. Pick another combination. ⌘⇧3/4/5 are reserved for screenshots. Control+Option combinations are refused because macOS VoiceOver uses them. |
-| The zoom lens is black or shows only the wallpaper | Allow Screen Recording for Overmark (standalone) or Claude (Claude app), then reopen the app. |
+| The zoom lens is black or shows only the wallpaper, or a screenshot says "could not create image from rect" | macOS is blocking screen capture. Allow **Overmark** (downloaded app) or **Claude** (Claude app) in System Settings → Privacy & Security → **Screen Recording**, then quit and reopen it. Overmark opens that page for you the first time it happens. |
 | Ink appears on the wrong display | Overmark covers the display your pointer is on when you start drawing. Move the pointer there and press ⌘⇧1 again. |
 | Claude app shows "This app has a new version" | Click **Reload**, or menu bar → Reload Overmark. |
 | You need to report a bug | Settings → General → Diagnostics → **Copy**, and paste it into an issue. |

@@ -5,7 +5,7 @@ Every push to `main` and every pull request runs all of this (`.github/workflows
 | Suite | What it drives | Steps |
 |---|---|---|
 | `tests/standalone_e2e.js`: user flow | The real downloadable app (Electron + `desktop/main.js` + `desktop/preload.js` + the bundled page), from a fresh install to quitting and relaunching, including updates | 33 |
-| `tests/features_e2e.js`: every feature | Every setting, drawing tool (eraser included), toolbar button, colour picker, stylus pressure, screenshot, shortcut-editor rule, menu bar item and update notice, each checked by what it does on screen | 87 |
+| `tests/features_e2e.js`: every feature | Every setting, drawing tool (eraser included), toolbar button and toolbar customisation, colour picker, stylus pressure, screenshot (including macOS refusing it), shortcut-editor rule, menu bar item and update notice, each checked by what it does on screen | 94 |
 | `tests/smoke_test.py`: web page | `index.html` in Chromium against a mock of the Claude desktop API (the Claude-app edition) | 1 run, many checks |
 | CI build checks (macOS) | The packaged apps: signature, menu-bar-only, version, launches and keeps running, DMG integrity | per release |
 
@@ -17,6 +17,7 @@ They test from the outside, the way a person would see the app:
 - **Global shortcuts and menu clicks** reach the page the same way macOS delivers them. A synthetic key press can't reach a system-wide hotkey, so the tests also check registration with the system.
 
 Stand-ins:
+- **macOS refusing capture:** the screencapture stand-in fails with macOS's real error ("could not create image from rect") while `/tmp/overmark-capture-deny` exists.
 - **Stylus pressure:** real pointer events with `pointerType: "pen"` and a fixed pressure.
 - **GitHub Releases:** a local server with real files and checksums, so updates are tested end to end, including refusing a tampered download.
 - **macOS `screencapture`:** on Linux CI, `tests/fixtures/fake-screencapture.sh` logs the area requested and returns a test image. That's how the tests check the zoom lens captures exactly `size / magnification` around the pointer and draws beside it.
@@ -32,23 +33,23 @@ xvfb-run -a -s "-screen 0 1440x900x24" npm test
 python ../tests/smoke_test.py   # web page
 ```
 
-## Latest results: 33/33 and 87/87
+## Latest results: 33/33 and 94/94
 Linux under Xvfb, with the screencapture stand-in. Both suites ran three times in a row with no failures. The flow suite also passes without the stand-in, where it checks that zoom fails safely instead.
 
-### Every feature (87)
+### Every feature (94)
 | # | Feature | Result |
 |---|---|---|
 | | **Settings · General** | |
 | 1 | Tips on: the overlay greets you with the shortcut list | ✅ Overmark is on. ⌘⇧1 draw ⌘⇧2 highlight ⌘⇧7 spotlight ⌘⇧8 zoo… |
 | 2 | Tips off: no welcome tip | ✅  |
-| 3 | Toolbar position: Bottom puts the drawing toolbar at the bottom | ✅ bottom at y=781, top at y=14 |
+| 3 | Toolbar position: Bottom puts the drawing toolbar at the bottom | ✅ bottom at y=826, top at y=14 |
 | 4 | Show toolbar off: annotating starts with the toolbar hidden | ✅  |
 | 5 | Diagnostics shows live state, and Copy puts it on the clipboard | ✅ 782 chars copied |
 | | **Settings · Annotate** | |
 | 6 | Palette: editing colour 1 changes the toolbar swatch and the ink | ✅ swatch and ink green |
 | 7 | Gradient ink blends from the first colour to the second | ✅ start rgb(3,0,251) → end rgb(252,0,3) |
 | 8 | Line weight scales every stroke width | ✅ 0.5× → 4 px, 2× → 13 px |
-| 9 | Auto-erase: each mark fades out after the set time | ✅ gone after 1.7 s (set to 1 s + fade) |
+| 9 | Auto-erase: each mark fades out after the set time | ✅ gone after 1.8 s (set to 1 s + fade) |
 | 10 | Whiteboard style: white | ✅ rgb(251,251,248) |
 | 11 | Whiteboard style: dark | ✅ rgb(22,23,26) |
 | 12 | Whiteboard style: white with dots | ✅ 408 dot pixels in a strip |
@@ -85,7 +86,7 @@ Linux under Xvfb, with the screencapture stand-in. Both suites ran three times i
 | 40 | Reset all to defaults | ✅  |
 | 41 | Menu bar labels show the current shortcuts | ✅ Annotate screen ⌘⇧1 |
 | | **About & reset** | |
-| 42 | About shows the app version and a working GitHub link | ✅ Version 1.0.0-beta.1 |
+| 42 | About shows the app version and a working GitHub link | ✅ Version 1.0.0-beta.2 |
 | 43 | Reset all settings restores every default | ✅  |
 | | **Drawing tools and toolbar** | |
 | 44 | Every tool button selects its tool | ✅ 8 tools |
@@ -119,32 +120,40 @@ Linux under Xvfb, with the screencapture stand-in. Both suites ran three times i
 | 70 | Settings → Annotate → Custom colour changes the swatch and the ink | ✅  |
 | 71 | Stylus pressure: a harder press draws a thicker line (mouse strokes unaffected) | ✅ light 4 px, hard 11 px, mouse 7 px |
 | | **Screenshot** | |
-| 72 | The toolbar button saves the screen with ink to the Desktop, hiding the toolbar while it captures | ✅ Overmark 2026-11-27 at 18.03.00.png; "Screenshot saved to Desktop/Overmark 2026-11-27 at 18.03.00.png and copied to the clipboard." |
+| 72 | The toolbar button saves the screen with ink to the Desktop, hiding the toolbar while it captures | ✅ Overmark 2026-11-27 at 19.16.15.png; "Screenshot saved to Desktop/Overmark 2026-11-27 at 19.16.15.png and copied to the clipboard." |
 | 73 | It is copied to the clipboard | ✅  |
 | 74 | C key and the menu bar item take screenshots too; quick repeats never overwrite each other | ✅  |
 | 75 | Screenshot can have its own global shortcut | ✅  |
-| 76 | The menu item is unavailable in the Settings window | ✅  |
+| 76 | If macOS blocks capture, Overmark says what to allow and opens Screen Recording settings (once) | ✅ Screenshots need Screen Recording. Allow Overmark in System Settings → Privacy & Security → Screen Recording, then quit and reopen Overmark. |
+| 77 | The menu item is unavailable in the Settings window | ✅  |
+| | **Toolbar** | |
+| 78 | Default toolbar: red, yellow, blue and green, plus the colour picker | ✅ red, yellow, blue, green + picker; orange/white/gradient by key |
+| 79 | Settings → Toolbar lists every item with a switch, and a live preview | ✅ 29 items: tools, colours, sizes, edit, modes and effects |
+| 80 | Hiding items removes them from the toolbar and preview; their keys still work | ✅ eraser, zoom and help hidden; E still erases |
+| 81 | Showing a hidden item adds it back (gradient ink) | ✅  |
+| 82 | Separators appear only between groups that still show something | ✅ 4 → 3 separators with Edit hidden |
+| 83 | Reset toolbar to the default | ✅  |
 | | **Menu bar menu** | |
-| 77 | Annotate screen ↔ Stop annotating follows the state; Interactive mode only while drawing | ✅  |
-| 78 | Clear ink is enabled only when there is ink, and clears it | ✅  |
-| 79 | Annotate without controls | ✅  |
-| 80 | Whiteboard, Highlight, Spotlight and Auto-erase are ticked when on | ✅ 4 toggles |
-| 81 | Zoom is ticked when on and draws the lens | ✅  |
-| 82 | Show shortcuts lists the keys on screen | ✅ ⌘⇧1 draw ⌘⇧2 highlight ⌘⇧7 spotlight ⌘⇧8 zoom ⌘⇧0  |
-| 83 | Open at login | ✅ skipped: login items are a macOS feature |
+| 84 | Annotate screen ↔ Stop annotating follows the state; Interactive mode only while drawing | ✅  |
+| 85 | Clear ink is enabled only when there is ink, and clears it | ✅  |
+| 86 | Annotate without controls | ✅  |
+| 87 | Whiteboard, Highlight, Spotlight and Auto-erase are ticked when on | ✅ 4 toggles |
+| 88 | Zoom is ticked when on and draws the lens | ✅  |
+| 89 | Show shortcuts lists the keys on screen | ✅ ⌘⇧1 draw ⌘⇧2 highlight ⌘⇧7 spotlight ⌘⇧8 zoom ⌘⇧0  |
+| 90 | Open at login | ✅ skipped: login items are a macOS feature |
 | | **Updates, as people see them** | |
-| 84 | A new release shows in Settings with an Install button | ✅ Install update (9.9.0) |
-| 85 | …and once on screen during a presentation | ✅ Overmark 9.9.0 is available. Click the menu bar icon → Install update. |
-| 86 | …and in the menu bar menu | ✅  |
+| 91 | A new release shows in Settings with an Install button | ✅ Install update (9.9.0) |
+| 92 | …and once on screen during a presentation | ✅ Overmark 9.9.0 is available. Click the menu bar icon → Install update. |
+| 93 | …and in the menu bar menu | ✅  |
 | | **Settings survive a restart** | |
-| 87 | Settings, shortcuts, tool and colour are kept after quitting | ✅ palette, highlight shape, ⌘⇧L, arrow tool, colour 3 |
+| 94 | Settings, shortcuts, tool and colour are kept after quitting | ✅ palette, highlight shape, ⌘⇧L, arrow tool, colour 3, toolbar |
 
 ### User flow (33)
 | # | Step | Result |
 |---|---|---|
 | 1 | First launch opens the Settings window (not an invisible menu bar app) | ✅ 940×760 |
 | 2 | Works offline: no internet requests, bundled font loaded | ✅ weights 400/500/600/700/800 |
-| 3 | Settings: every tab renders; About credits thepiyushway; no Claude-only sections | ✅ general, annotate, cursor, spot, keys, about |
+| 3 | Settings: every tab renders; About credits thepiyushway; no Claude-only sections | ✅ general, annotate, toolbar, cursor, spot, keys, about |
 | 4 | Settings → About → "Check for updates" reports a new version | ✅ shown |
 | 5 | Menu bar item is created with every action | ✅ 17 items |
 | 6 | "Run in menu bar" switches to the click-through overlay covering the screen | ✅ 1440×900, always on top |
@@ -168,7 +177,7 @@ Linux under Xvfb, with the screencapture stand-in. Both suites ran three times i
 | 24 | Opening the app again while it runs shows Settings | ✅  |
 | 25 | Closing the Settings window keeps Overmark running; ⌘⇧1 still works | ✅  |
 | 26 | Settings… from the menu bar | ✅  |
-| 27 | Updates: no newer release → "up to date" | ✅ running 1.0.0-beta.1 |
+| 27 | Updates: no newer release → "up to date" | ✅ running 1.0.0-beta.2 |
 | 28 | Updates: when up to date the menu offers "Check for updates…" | ✅  |
 | 29 | Updates: a newer release is found and offered in the menu | ✅ offers 1.0.0 |
 | 30 | Updates: the download is verified against SHA256SUMS.txt | ✅ checksum OK |

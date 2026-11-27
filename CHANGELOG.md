@@ -2,6 +2,11 @@
 
 Each `## <version>` section becomes the notes of that GitHub Release. People see them under "What's new…" when Overmark offers the update.
 
+## 1.0.0-beta.3
+- **A simpler toolbar:** red, yellow, blue and green, plus the colour picker. Orange, white and gradient ink are still on keys 5, 6 and 7.
+- **Customise the toolbar** (Settings → Toolbar): show or hide every tool, colour, size and button, with a live preview. Hidden items still work from the keyboard, and Reset toolbar restores the default.
+- **Clearer Screen Recording help:** when macOS blocks a screenshot or the zoom lens ("could not create image from rect"), Overmark explains which app to allow and opens the right page in System Settings.
+
 ## 1.0.0-beta.2
 New tools, after a feature comparison with Epic Pen:
 
